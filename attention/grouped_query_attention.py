@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from attention.rmsnorm import RMSNorm
+from attention.rmsnorm import compute_rmsnorm
 from attention.rope import compute_rope
 
 class GQA(nn.Module):
@@ -31,8 +31,8 @@ class GQA(nn.Module):
         values = values.view(batch_size, seq_len, self.head_dim, self.num_heads//self.gka_ratio) # batch_size x seq_len x 64 x 8
         
         # #normalize QK (CHECK THIS)
-        # queries = RMSNorm(self.head_dim)(queries) # batch_size x seq_len x 64 x 16
-        # keys = RMSNorm(self.head_dim)(keys) # batch_size x seq_len x 64 x 8
+        queries = compute_rmsnorm(queries.permute(0, 3, 1, 2)).permute(0, 2, 3, 1) # batch_size x seq_len x 64 x 16, normalize across hidden dimensions
+        keys = compute_rmsnorm(keys.permute(0, 3, 1, 2)).permute(0, 2, 3, 1) # batch_size x seq_len x 64 x 8, normalize across hidden dimensions
 
         #Compute RoPE embeddings
         queries = compute_rope(queries) # batch_size x seq_len x 64 x 16
