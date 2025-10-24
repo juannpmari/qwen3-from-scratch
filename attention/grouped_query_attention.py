@@ -4,7 +4,7 @@ from attention.rmsnorm import compute_rmsnorm
 from attention.rope import compute_rope
 
 class GQA(nn.Module):
-    def __init__(self, emb_dim, gka_ratio = 2, num_heads = 16):
+    def __init__(self, context_length, emb_dim, gka_ratio = 2, num_heads = 16):
         super().__init__()
         self.W_Q = nn.Linear(emb_dim, emb_dim, bias=False) # 1024x1024 #no QKV bias in qwen3
         self.W_K = nn.Linear(emb_dim, emb_dim//gka_ratio, bias=False) # 1024x512 #no QKV bias in qwen3
@@ -14,13 +14,15 @@ class GQA(nn.Module):
         self.gka_ratio = gka_ratio
         self.linear_output_layer = nn.Linear(emb_dim, emb_dim, bias=False)
 
+        self.register_buffer("mask", torch.triu(torch.ones(context_length, context_length), diagonal=1))
+
     def forward(self, x):
         """
         x: inputs of shape (batch_size, seq_len, hidden_dim)
         """
         batch_size, seq_len, hidden_dim = x.shape # batch_size x seq_len x 1024
 
-        #compute Q, K, V marices
+        #compute Q, K, V matrices
         queries = self.W_Q(x) # my_linear.forward(x) -> tensor: batch_size x seq_len x 1024
         keys = self.W_K(x) # my_linear.forward(x) -> tensor: batch_size x seq_len x 512
         values = self.W_V(x) # my_linear.forward(x) -> tensor: batch_size x seq_len x 512
@@ -48,9 +50,9 @@ class GQA(nn.Module):
 
         #compute attention scores
         attn_scores = queries @ keys #batch_size x 8 x 2 x seq_len x seq_len
+        mask = self.mask[:seq_len, :seq_len].bool()
+        attn_scores = attn_scores.masked_fill(mask, -float('inf'))
                         
-        #mask?
-
         #compute attention weights
         attn_weights = torch.softmax(attn_scores/hidden_dim**0.5, dim=-1) # batch_size x 8 x 2 x seq_len x seq_len
 
