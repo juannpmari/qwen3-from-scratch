@@ -46,5 +46,19 @@ class Transformer(nn.Module):
         device: device to run on
         """
         super().__init__()
+        self.token_embedding = nn.Embedding(vocab_size, hidden_dim)
         self.transformer_blocks = nn.ModuleList([TransformerBlock(hidden_dim, context_length, dff, gka_ratio, num_heads, device) for _ in range(num_layers)])
+        self.rmsnorm = RMSNorm(hidden_dim, device)
+        self.output_layer = nn.Linear(hidden_dim, vocab_size) #CHECK: qwen3 uses tied embeddings
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        x: inputs
+        """
+        x = self.token_embedding(x)
+        for block in self.transformer_blocks:
+            x = block(x)
+        x = self.rmsnorm(x)
+        x = self.output_layer(x)
+        return x #logits
     
