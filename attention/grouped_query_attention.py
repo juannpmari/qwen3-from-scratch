@@ -1,10 +1,11 @@
 import torch
 import torch.nn as nn
 from attention.rmsnorm import compute_rmsnorm
-from attention.rope import compute_rope
+from attention.rope import RoPE
+from attention.rmsnorm import RMSNorm
 
 class GQA(nn.Module):
-    def __init__(self, context_length, emb_dim, gka_ratio = 2, num_heads = 16):
+    def __init__(self, context_length, emb_dim, gka_ratio = 2, num_heads = 16, device = None):
         super().__init__()
         self.W_Q = nn.Linear(emb_dim, emb_dim, bias=False) # 1024x1024 #no QKV bias in qwen3
         self.W_K = nn.Linear(emb_dim, emb_dim//gka_ratio, bias=False) # 1024x512 #no QKV bias in qwen3
@@ -13,6 +14,8 @@ class GQA(nn.Module):
         self.head_dim = emb_dim // num_heads
         self.gka_ratio = gka_ratio
         self.linear_output_layer = nn.Linear(emb_dim, emb_dim, bias=False)
+        self.rope = RoPE(self.head_dim, context_length, device)
+        self.rmsnorm = RMSNorm(emb_dim, device)
 
         self.register_buffer("mask", torch.triu(torch.ones(context_length, context_length), diagonal=1))
 
@@ -33,12 +36,12 @@ class GQA(nn.Module):
         values = values.view(batch_size, seq_len, self.head_dim, self.num_heads//self.gka_ratio) # batch_size x seq_len x 64 x 8
         
         # #normalize QK (CHECK THIS)
-        queries = compute_rmsnorm(queries.permute(0, 3, 1, 2)).permute(0, 2, 3, 1) # batch_size x seq_len x 64 x 16, normalize across hidden dimensions
-        keys = compute_rmsnorm(keys.permute(0, 3, 1, 2)).permute(0, 2, 3, 1) # batch_size x seq_len x 64 x 8, normalize across hidden dimensions
+        queries = self.rmsnorm.forward(queries.permute(0, 3, 1, 2)).permute(0, 2, 3, 1) # batch_size x seq_len x 64 x 16, normalize across hidden dimensions
+        keys = self.rmsnorm.forward(keys.permute(0, 3, 1, 2)).permute(0, 2, 3, 1) # batch_size x seq_len x 64 x 8, normalize across hidden dimensions
 
         #Compute RoPE embeddings
-        queries = compute_rope(queries) # batch_size x seq_len x 64 x 16
-        keys = compute_rope(keys) # batch_size x seq_len x 64 x 8
+        queries = self.rope.forward(queries) # batch_size x seq_len x 64 x 16
+        keys = self.rope.forward(keys) # batch_size x seq_len x 64 x 8
 
         
         #reshape for attention computation
