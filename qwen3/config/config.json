@@ -1,0 +1,10 @@
+{
+    "hidden_dim": 1024,
+    "context_length": 2048,
+    "dff": 4096,
+    "gka_ratio": 2,
+    "num_heads": 16,
+    "num_layers": 24,
+    "vocab_size": 32000,
+    "device": "cpu"
+}
