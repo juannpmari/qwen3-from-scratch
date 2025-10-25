@@ -1,9 +1,9 @@
 import torch
 
 class RMSNorm(nn.Module):
-    def __init__(self, hidden_dim: int):
+    def __init__(self, hidden_dim: int, eps: float = 1e-5, device=None, dtype=None):
         super().__init__()
-        self.epsilon = 1e-5
+        self.epsilon = eps
         self.gain = torch.nn.Parameter(torch.ones(hidden_dim))
         
     def forward(self, x: torch.tensor) -> torch.tensor:
