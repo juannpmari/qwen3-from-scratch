@@ -69,8 +69,22 @@ class AdamW(Optimizer):
         return loss
 
 
-class LRScheduler:
-    pass
+def cosine_annealing_lr_scheduler(t, max_lr, min_lr, Tw, Tc):
+    """
+    t: current iteration
+    max_lr: maximum learning rate
+    min_lr: minimum learning rate
+    Tw: warmup steps
+    Tc: cosine annealing steps
+    """
+    if t < Tw:
+        return t/Tw * max_lr
+    elif t >= Tw and t <= Tc:
+        return min_lr + 0.5*(1+math.cos(math.pi*(t-Tw)/(Tc-Tw)))*(max_lr-min_lr)
+    elif t > Tc:
+        return min_lr
+        
+        
 
 class GradientClipper:
     pass
