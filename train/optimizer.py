@@ -86,5 +86,14 @@ def cosine_annealing_lr_scheduler(t, max_lr, min_lr, Tw, Tc):
         
         
 
-class GradientClipper:
-    pass
+def clip_gradients(parameters, max_norm, eps = 1e-6):
+    """
+    parameters: list of parameters
+    max_norm: maximum norm of gradients
+    eps: small number to avoid division by zero
+    """
+    for p in parameters:
+        if p.grad is None:
+            continue
+        if p.grad.norm() > max_norm:
+            p.grad.data = p.grad.data * max_norm / (p.grad.norm() + eps)
