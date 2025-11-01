@@ -1,6 +1,6 @@
-from common.grouped_query_attention import GQA
-from common.rmsnorm import RMSNorm
-from common.feed_forward import SwigluFeedForward
+from blocks.grouped_query_attention import GQA
+from blocks.rmsnorm import RMSNorm
+from blocks.feed_forward import SwigluFeedForward
 import torch
 import torch.nn as nn
 
