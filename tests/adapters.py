@@ -9,6 +9,7 @@ import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
 from src.blocks.rmsnorm import RMSNorm
+from src.blocks.feed_forward import SwigluFeedForward
 
 def run_linear(
     d_in: int,
@@ -83,7 +84,11 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+    
+    swiglu = SwigluFeedForward(d_model, d_ff)
+    swiglu.load_state_dict({"W1.weight": w1_weight, "W2.weight": w2_weight, "W3.weight": w3_weight})
+    return swiglu(in_features)
+    
 
 
 def run_scaled_dot_product_attention(
@@ -300,7 +305,7 @@ def run_transformer_lm(
         num_heads (int): Number of heads to use in multi-headed attention. `d_model` must be
             evenly divisible by `num_heads`.
         d_ff (int): Dimensionality of the feed-forward inner layer (section 3.3).
-        rope_theta (float): The RoPE $\Theta$ parameter.
+        rope_theta (float): The RoPE Theta parameter.
         weights (dict[str, Tensor]):
             State dict of our reference implementation. {num_layers} refers to an
             integer between `0` and `num_layers - 1` (the layer index).
