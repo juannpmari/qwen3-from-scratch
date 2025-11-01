@@ -1,0 +1,2 @@
+class QwenTokenizer:
+    pass
