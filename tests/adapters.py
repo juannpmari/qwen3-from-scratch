@@ -12,6 +12,7 @@ from src.blocks.rmsnorm import RMSNorm
 from src.blocks.feed_forward import SwigluFeedForward
 from src.train.loss import compute_cross_entropy
 from src.train.optimizer import AdamW, clip_gradients, cosine_annealing_lr_scheduler
+from src.preprocessing.dataloader import sample_data
 
 def run_linear(
     d_in: int,
@@ -424,7 +425,7 @@ def run_get_batch(
         is the sampled input sequences, and the second tuple item is the corresponding
         language modeling labels.
     """
-    raise NotImplementedError
+    return sample_data(dataset, batch_size, context_length, device)
 
 
 def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, " ..."]:
