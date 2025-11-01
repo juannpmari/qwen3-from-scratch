@@ -8,5 +8,8 @@ class RMSNorm(nn.Module):
         self.gain = torch.nn.Parameter(torch.ones(hidden_dim))
         
     def forward(self, x: torch.tensor) -> torch.tensor:
+        in_dtype = x.dtype
+        x = x.to(torch.float32) #To avoid overflow when squaring
         rms = torch.sqrt(torch.mean(x**2, dim=-1, keepdim=True) + self.epsilon)
-        return self.gain * x/rms
+        result = self.gain * x/rms
+        return result.to(in_dtype)
