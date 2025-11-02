@@ -39,8 +39,8 @@ class GQA(nn.Module):
         keys = self.rmsnorm.forward(keys.permute(0, 3, 1, 2)).permute(0, 2, 3, 1) # batch_size x seq_len x 64 x 8, normalize across hidden dimensions
 
         #Compute RoPE embeddings
-        queries = self.rope.forward(queries) # batch_size x seq_len x 64 x 16
-        keys = self.rope.forward(keys) # batch_size x seq_len x 64 x 8
+        queries = self.rope.forward(queries, token_positions = torch.arange(seq_len)) # batch_size x seq_len x 64 x 16
+        keys = self.rope.forward(keys, token_positions = torch.arange(seq_len)) # batch_size x seq_len x 64 x 8
 
         
         #reshape for attention computation

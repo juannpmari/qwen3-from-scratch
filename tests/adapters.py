@@ -13,6 +13,8 @@ from src.blocks.feed_forward import SwigluFeedForward
 from src.train.loss import compute_cross_entropy
 from src.train.optimizer import AdamW, clip_gradients, cosine_annealing_lr_scheduler
 from src.preprocessing.dataloader import sample_data
+from src.train.checkpointing import save_checkpoint, load_checkpoint
+from src.blocks.rope import RoPE
 
 def run_linear(
     d_in: int,
@@ -208,7 +210,17 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    raise NotImplementedError
+    rope = RoPE(d=d_k, m=max_seq_len)
+    orig_dim = in_query_or_key.dim()
+    if in_query_or_key.dim() < 4:
+        while in_query_or_key.dim() < 4:
+            in_query_or_key = in_query_or_key.unsqueeze(-1)
+    result = rope(in_query_or_key, token_positions)
+    while result.dim() > orig_dim:
+        result = result.squeeze(-1)
+
+    print(result.shape)
+    return result
 
 
 def run_transformer_block(
@@ -525,7 +537,7 @@ def run_save_checkpoint(
             we've completed.
         out (str | os.PathLike | BinaryIO | IO[bytes]): Path or file-like object to serialize the model, optimizer, and iteration to.
     """
-    raise NotImplementedError
+    save_checkpoint(model, optimizer, iteration, out)
 
 
 def run_load_checkpoint(
@@ -546,7 +558,7 @@ def run_load_checkpoint(
     Returns:
         int: the previously-serialized number of iterations.
     """
-    raise NotImplementedError
+    return load_checkpoint(src, model, optimizer)
 
 
 def get_tokenizer(
