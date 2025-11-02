@@ -29,97 +29,6 @@ class SGD(Optimizer):
                 state["t"] = t + 1 # Increment iteration number.
         return loss
 
-import math
-from typing import Optional, Callable
-
-import torch
-from torch.optim import Optimizer
-
-# Works but created by chatgpt
-# class AdamW(Optimizer):
-#     """
-#     A lightweight, correct implementation of the AdamW optimizer (decoupled weight decay).
-
-#     Usage:
-#         optimizer = AdamW(model.parameters(), lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01)
-
-#     This implementation follows the standard bias-correction and decoupled weight decay
-#     behavior found in PyTorch's official AdamW.
-#     """
-
-#     def __init__(self, params, lr: float = 1e-3, betas=(0.9, 0.999), eps: float = 1e-8, weight_decay: float = 0.01):
-#         if lr <= 0.0:
-#             raise ValueError(f"Invalid learning rate: {lr}")
-#         if not 0.0 <= eps:
-#             raise ValueError(f"Invalid eps value: {eps}")
-
-#         defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay)
-#         super().__init__(params, defaults)
-
-#     @torch.no_grad()
-#     def step(self, closure: Optional[Callable] = None):
-#         """
-#         Performs a single optimization step.
-
-#         Args:
-#             closure (callable, optional): A closure that reevaluates the model and returns the loss.
-#         Returns:
-#             loss (optional): The value returned by the closure, if provided.
-#         """
-#         loss = None
-#         if closure is not None:
-#             # Re-evaluate the model under grad enabled context
-#             with torch.enable_grad():
-#                 loss = closure()
-
-#         for group in self.param_groups:
-#             lr = group["lr"]
-#             b1, b2 = group["betas"]
-#             eps = group["eps"]
-#             wd = group["weight_decay"]
-
-#             for p in group["params"]:
-#                 if p.grad is None:
-#                     continue
-
-#                 grad = p.grad
-#                 if grad.is_sparse:
-#                     # Sparse gradients are not supported by this AdamW implementation.
-#                     raise RuntimeError("AdamW does not support sparse gradients")
-
-#                 # Ensure state initialization (lazy)
-#                 state = self.state.setdefault(p, {})
-#                 if len(state) == 0:
-#                     state["step"] = 0
-#                     state["m"] = torch.zeros_like(p.data)
-#                     state["v"] = torch.zeros_like(p.data)
-
-#                 m = state["m"]
-#                 v = state["v"]
-
-#                 state["step"] += 1
-#                 t = state["step"]
-
-#                 # Update biased first and second moment estimates
-#                 m.mul_(b1).add_(grad, alpha=1 - b1)
-#                 v.mul_(b2).addcmul_(grad, grad, value=1 - b2)
-
-#                 # Compute bias-corrected step size
-#                 bias_correction1 = 1 - b1 ** t
-#                 bias_correction2 = 1 - b2 ** t
-#                 # small epsilon added to denominator to avoid potential divide-by-zero
-#                 step_size = lr * math.sqrt(bias_correction2) / (bias_correction1 + 1e-16)
-
-#                 # Decoupled weight decay (AdamW): scale parameters by (1 - lr * weight_decay)
-#                 if wd != 0:
-#                     p.data.mul_(1 - lr * wd)
-
-#                 # Parameter update: p = p - step_size * m / (sqrt(v) + eps)
-#                 denom = v.sqrt().add_(eps)
-#                 p.data.addcdiv_(m, denom, value=-step_size)
-
-#         return loss
-
 class AdamW(Optimizer):
     """
     AdamW optimizer.
@@ -127,14 +36,18 @@ class AdamW(Optimizer):
     def __init__(self, params, lr=1e-3, betas =(0.9, 0.95), eps=1e-08, weight_decay = 0.01):
         if lr <= 0.0:
             raise ValueError(f"Invalid learning rate: {lr}")
-        
         b1, b2 = betas
         default = {"lr": lr, "b1": b1, "b2": b2, "eps": eps, "weight_decay": weight_decay}
         super().__init__(params, default)
-        for p in params:
-            self.state[p]['m'] = torch.zeros_like(p)
-            self.state[p]['v'] = torch.zeros_like(p)
+        for group in self.param_groups:
+            for p in group['params']:
+                state = self.state[p]
+                if 'm' not in state:
+                    state['m'] = torch.zeros_like(p)
+                if 'v' not in state:
+                    state['v'] = torch.zeros_like(p)
 
+    @torch.no_grad() #To avoid tracking by autograd
     def step(self, closure:Optional[Callable] = None):
         loss = None if closure is None else closure()
         for group in self.param_groups:
@@ -148,17 +61,18 @@ class AdamW(Optimizer):
                     continue
                 state = self.state[p]
                 grad = p.grad.data
-                m = b1*self.state[p]['m'] + (1-b1)*grad
-                v = b2*self.state[p]['v'] + (1-b2)*grad**2
-                self.state[p]['m'] = m
-                self.state[p]['v'] = v
-
+                self.state[p]['m'] = b1*self.state[p]['m'] + (1-b1)*grad #same shape as p.data
+                self.state[p]['v'] = b2*self.state[p]['v'] + (1-b2)*grad**2 #same shape as p.data
+                m = self.state[p]['m']
+                v = self.state[p]['v']
                 t = state.get("t", 1)
-                lr = lr*math.sqrt(1-b2**t)/(1-b1**t)
-                p.data -= lr*m/math.sqrt(v+eps)
-                p.data -= lr*weight_decay*p.data
+                lr_param = lr*math.sqrt(1-b2**t)/(1-b1**t)
+                p.data -= lr_param*m/(torch.sqrt(v)+eps)
                 self.state[p]["t"] = t + 1
+                p.data -= lr*weight_decay*p.data
+           
         return loss
+# uv run pytest -k test_adamw
 
 
 def cosine_annealing_lr_scheduler(t, max_lr, min_lr, Tw, Tc):
