@@ -19,6 +19,7 @@ from src.blocks.grouped_query_attention import GQA
 from src.qwen3.transformer import TransformerBlock, Transformer
 from src.common.softmax import softmax
 from src.common.linear import Linear
+from src.common.embedding import Embedding
 
 def run_linear(
     d_in: int,
@@ -62,7 +63,9 @@ def run_embedding(
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
 
-    raise NotImplementedError
+    embedding = Embedding(vocab_size, d_model)
+    embedding.load_state_dict({"weight": weights})
+    return embedding(token_ids)
 
 
 def run_swiglu(

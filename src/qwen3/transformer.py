@@ -3,6 +3,8 @@ from src.blocks.rmsnorm import RMSNorm
 from src.blocks.feed_forward import SwigluFeedForward
 import torch
 import torch.nn as nn
+from src.common.linear import Linear
+from src.common.embedding import Embedding
 
 class TransformerBlock(nn.Module):
     def __init__(self, hidden_dim: int, context_length: int, dff: int, gka_ratio: int = 2, num_heads: int = 16, device: torch.device | None = None):
@@ -47,10 +49,10 @@ class Transformer(nn.Module):
         device: device to run on
         """
         super().__init__()
-        self.token_embedding = nn.Embedding(vocab_size, hidden_dim)
+        self.token_embedding = Embedding(vocab_size, hidden_dim)
         self.transformer_blocks = nn.ModuleList([TransformerBlock(hidden_dim, context_length, dff, gka_ratio, num_heads, device) for _ in range(num_layers)])
         self.rmsnorm = RMSNorm(hidden_dim, device = device)
-        self.output_layer = nn.Linear(hidden_dim, vocab_size) #CHECK: qwen3 uses tied embeddings
+        self.output_layer = Linear(hidden_dim, vocab_size) #CHECK: qwen3 uses tied embeddings
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
