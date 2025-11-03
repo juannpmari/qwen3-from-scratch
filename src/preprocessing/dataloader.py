@@ -44,17 +44,16 @@ def sample_data(x: np.ndarray, b: int, context_length: int, device: torch.device
     Returns:
         (torch.Tensor, torch.Tensor): the sampled input sequences and the corresponding next-token targets (each (batch_size,context_length))
     """
-    samples = torch.zeros((b, context_length), dtype=torch.long, device=device)
-    targets = torch.zeros((b, context_length), dtype=torch.long, device=device)
-    x = torch.from_numpy(x).to(device)
 
-    print(x.shape)
-    print(context_length)
-    i = 0
-    while i < b and i < len(x) - context_length:
-        samples[i] = x[i:i+context_length]
-        targets[i] = x[i+1:i+context_length+1]
-        i += 1
+    x = torch.from_numpy(x).to(device)
+    max_start_exclusive = len(x) - context_length
+    
+    starts = torch.randint(0, max_start_exclusive, (b,), device=device)
+    offsets = torch.arange(context_length, device=device).unsqueeze(0)  # (1, context_length)
+    idx = starts.unsqueeze(1) + offsets  # (b, context_length)
+
+    samples = x[idx]
+    targets = x[idx + 1]
     return samples, targets
 
 #TODO: Fix and replace by yield to return a generator
