@@ -2,10 +2,10 @@ import torch
 import torch.nn as nn
 
 class RMSNorm(nn.Module):
-    def __init__(self, hidden_dim: int, eps: float = 1e-5, device=None, dtype=None):
+    def __init__(self, head_dim: int, eps: float = 1e-5, device=None, dtype=None):
         super().__init__()
         self.epsilon = eps
-        self.gain = torch.nn.Parameter(torch.ones(hidden_dim))
+        self.gain = torch.nn.Parameter(torch.ones(head_dim))
         
     def forward(self, x: torch.tensor) -> torch.tensor:
         in_dtype = x.dtype

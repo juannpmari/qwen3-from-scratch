@@ -15,6 +15,7 @@ from src.train.optimizer import AdamW, clip_gradients, cosine_annealing_lr_sched
 from src.preprocessing.dataloader import sample_data
 from src.train.checkpointing import save_checkpoint, load_checkpoint
 from src.blocks.rope import RoPE
+from src.blocks.grouped_query_attention import GQA
 
 def run_linear(
     d_in: int,
@@ -188,7 +189,14 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    gqa = GQA(max_seq_len, d_model, gka_ratio = 1, num_heads = num_heads)
+    gqa.load_state_dict({
+        "W_Q.weight": q_proj_weight,
+        "W_K.weight": k_proj_weight,
+        "W_V.weight": v_proj_weight,
+        "linear_output_layer.weight": o_proj_weight
+    }, strict=False)
+    return gqa(in_features)
 
 
 def run_rope(

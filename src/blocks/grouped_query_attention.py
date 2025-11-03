@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-from attention.rope import RoPE
-from attention.rmsnorm import RMSNorm
+from src.blocks.rope import RoPE
+from src.blocks.rmsnorm import RMSNorm
 
 class GQA(nn.Module):
     def __init__(self, context_length, hidden_dim, gka_ratio = 2, num_heads = 16, device = None):
@@ -14,13 +14,14 @@ class GQA(nn.Module):
         self.gka_ratio = gka_ratio
         self.linear_output_layer = nn.Linear(hidden_dim, hidden_dim, bias=False)
         self.rope = RoPE(self.head_dim, context_length, device)
-        self.rmsnorm = RMSNorm(hidden_dim, device)
+        self.rmsnorm = RMSNorm(self.head_dim, device=device)
 
         self.register_buffer("mask", torch.triu(torch.ones(context_length, context_length), diagonal=1))
 
-    def forward(self, x):
+    def forward(self, x, token_positions = None):
         """
         x: inputs of shape (batch_size, seq_len, hidden_dim)
+        token_positions: optional tensor with the positions of the tokens
         """
         batch_size, seq_len, hidden_dim = x.shape # batch_size x seq_len x 1024
 
@@ -28,20 +29,20 @@ class GQA(nn.Module):
         queries = self.W_Q(x) # my_linear.forward(x) -> tensor: batch_size x seq_len x 1024
         keys = self.W_K(x) # my_linear.forward(x) -> tensor: batch_size x seq_len x 512
         values = self.W_V(x) # my_linear.forward(x) -> tensor: batch_size x seq_len x 512
-        
+
         #split into heads
         queries = queries.view(batch_size, seq_len, self.head_dim, self.num_heads) # batch_size x seq_len x 64 x 16
         keys = keys.view(batch_size, seq_len, self.head_dim, self.num_heads//self.gka_ratio) # batch_size x seq_len x 64 x 8
         values = values.view(batch_size, seq_len, self.head_dim, self.num_heads//self.gka_ratio) # batch_size x seq_len x 64 x 8
-        
-        # #normalize QK (CHECK THIS)
+
+        #normalize QK (CHECK THIS) 
         queries = self.rmsnorm.forward(queries.permute(0, 3, 1, 2)).permute(0, 2, 3, 1) # batch_size x seq_len x 64 x 16, normalize across hidden dimensions
         keys = self.rmsnorm.forward(keys.permute(0, 3, 1, 2)).permute(0, 2, 3, 1) # batch_size x seq_len x 64 x 8, normalize across hidden dimensions
 
         #Compute RoPE embeddings
-        queries = self.rope.forward(queries, token_positions = torch.arange(seq_len)) # batch_size x seq_len x 64 x 16
-        keys = self.rope.forward(keys, token_positions = torch.arange(seq_len)) # batch_size x seq_len x 64 x 8
-
+        token_positions = torch.arange(seq_len) if token_positions is None else token_positions
+        queries = self.rope.forward(queries, token_positions = token_positions) # batch_size x seq_len x 64 x 16
+        keys = self.rope.forward(keys, token_positions = token_positions) # batch_size x seq_len x 64 x 8
         
         #reshape for attention computation
         queries = queries.view(batch_size, seq_len, self.head_dim, self.num_heads//self.gka_ratio, self.gka_ratio) # batch_size x seq_len x 64 x 8 x 2
@@ -56,10 +57,10 @@ class GQA(nn.Module):
         attn_scores = attn_scores.masked_fill(mask, -float('inf'))
                         
         #compute attention weights
-        attn_weights = torch.softmax(attn_scores/hidden_dim**0.5, dim=-1) # batch_size x 8 x 2 x seq_len x seq_len
+        attn_weights = torch.softmax(attn_scores/(self.head_dim**0.5), dim=-1) # batch_size x 8 x 2 x seq_len x seq_len
 
         #compute context vector
-        values =values.unsqueeze(-1) # batch_size x seq_len x 64 x 8 x 1
+        values = values.unsqueeze(-1) # batch_size x seq_len x 64 x 8 x 1
         values = values.permute(0,3,4,1,2) # batch_size x 8 x 1 x seq_len x 64
         context_vector = attn_weights @ values # batch_size x 8 x 2 x seq_len x 64
         context_vector = context_vector.view(batch_size, self.num_heads, seq_len, hidden_dim//self.num_heads) # batch_size x 16 x seq_len x 64
@@ -71,7 +72,6 @@ class GQA(nn.Module):
         #apply linear output layer
         context_vector = self.linear_output_layer(context_vector) # batch_size x seq_len x 1024
         
- 
         return context_vector
         
 
