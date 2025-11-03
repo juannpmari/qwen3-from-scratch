@@ -16,6 +16,7 @@ from src.preprocessing.dataloader import sample_data
 from src.train.checkpointing import save_checkpoint, load_checkpoint
 from src.blocks.rope import RoPE
 from src.blocks.grouped_query_attention import GQA
+from src.qwen3.transformer import TransformerBlock, Transformer
 
 def run_linear(
     d_in: int,
@@ -301,7 +302,20 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    transformer_block = TransformerBlock(d_model, max_seq_len, d_ff, gka_ratio = 1, num_heads = num_heads)
+    params = {
+        "gqa.W_Q.weight" : weights["attn.q_proj.weight"],
+        "gqa.W_K.weight" : weights["attn.k_proj.weight"],
+        "gqa.W_V.weight" : weights["attn.v_proj.weight"],
+        "gqa.linear_output_layer.weight" : weights["attn.output_proj.weight"],
+        "ff.W1.weight" : weights["ffn.w1.weight"],
+        "ff.W2.weight" : weights["ffn.w2.weight"],
+        "ff.W3.weight" : weights["ffn.w3.weight"],
+        "rmsnorm_1.weight" : weights["ln1.weight"],
+        "rmsnorm_2.weight" : weights["ln2.weight"],
+    }
+    transformer_block.load_state_dict(params, strict=False)
+    return transformer_block(in_features)
 
 
 def run_transformer_lm(
@@ -383,7 +397,23 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    transformer_lm = Transformer(vocab_size, num_layers, context_length, d_model, d_ff, gka_ratio=1, num_heads=num_heads)
+    params = {
+        "token_embedding.weight" : weights["token_embeddings.weight"],
+        "transformer_blocks.0.gqa.W_Q.weight" : weights["layers.0.attn.q_proj.weight"],
+        "transformer_blocks.0.gqa.W_K.weight" : weights["layers.0.attn.k_proj.weight"],
+        "transformer_blocks.0.gqa.W_V.weight" : weights["layers.0.attn.v_proj.weight"],
+        "transformer_blocks.0.linear_output_layer.weight" : weights["layers.0.attn.output_proj.weight"],
+        "transformer_blocks.0.ff.W1.weight" : weights["layers.0.ffn.w1.weight"],
+        "transformer_blocks.0.ff.W2.weight" : weights["layers.0.ffn.w2.weight"],
+        "transformer_blocks.0.ff.W3.weight" : weights["layers.0.ffn.w3.weight"],
+        "transformer_blocks.0.rmsnorm_1.weight" : weights["layers.0.ln1.weight"],
+        "transformer_blocks.0.rmsnorm_2.weight" : weights["layers.0.ln2.weight"],
+        "rmsnorm.weight" : weights["ln_final.weight"],
+        "output_layer.weight" : weights["lm_head.weight"],
+    }
+    transformer_lm.load_state_dict(params, strict=False)
+    return transformer_lm(in_indices)
 
 
 def run_rmsnorm(

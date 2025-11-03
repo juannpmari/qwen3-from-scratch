@@ -1,6 +1,6 @@
-from blocks.grouped_query_attention import GQA
-from blocks.rmsnorm import RMSNorm
-from blocks.feed_forward import SwigluFeedForward
+from src.blocks.grouped_query_attention import GQA
+from src.blocks.rmsnorm import RMSNorm
+from src.blocks.feed_forward import SwigluFeedForward
 import torch
 import torch.nn as nn
 
@@ -15,20 +15,21 @@ class TransformerBlock(nn.Module):
         device: device to run on
         """
         super().__init__()
-        self.rmsnorm = RMSNorm(hidden_dim, device)
-        self.gqa = GQA(context_length, hidden_dim, gka_ratio, num_heads, device)
-        self.ff = SwigluFeedForward(hidden_dim, dff, device)
+        self.rmsnorm_1 = RMSNorm(hidden_dim, device = device)
+        self.gqa = GQA(context_length, hidden_dim, gka_ratio, num_heads, device = device)
+        self.rmsnorm_2 = RMSNorm(hidden_dim, device = device)
+        self.ff = SwigluFeedForward(hidden_dim, dff, device = device)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         x: inputs of shape (batch_size, seq_len, hidden_dim)
         """
         residual = x
-        x = self.rmsnorm(x)
+        x = self.rmsnorm_1(x)
         x = self.gqa(x)
         x += residual
         residual = x
-        x = self.rmsnorm(x)
+        x = self.rmsnorm_2(x)
         x = self.ff(x)
         x += residual
         return x
@@ -48,7 +49,7 @@ class Transformer(nn.Module):
         super().__init__()
         self.token_embedding = nn.Embedding(vocab_size, hidden_dim)
         self.transformer_blocks = nn.ModuleList([TransformerBlock(hidden_dim, context_length, dff, gka_ratio, num_heads, device) for _ in range(num_layers)])
-        self.rmsnorm = RMSNorm(hidden_dim, device)
+        self.rmsnorm = RMSNorm(hidden_dim, device = device)
         self.output_layer = nn.Linear(hidden_dim, vocab_size) #CHECK: qwen3 uses tied embeddings
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

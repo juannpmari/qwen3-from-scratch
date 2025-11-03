@@ -3,7 +3,7 @@ import torch.nn as nn
 
 class SwigluFeedForward(nn.Module):
     
-    def __init__(self, hidden_dim: int, dff: int):
+    def __init__(self, hidden_dim: int, dff: int, device: torch.device | None = None):
         super().__init__()
         self.W1 = nn.Linear(hidden_dim, dff, bias=False)
         self.W2 = nn.Linear(dff, hidden_dim, bias=False)
