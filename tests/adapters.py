@@ -17,6 +17,8 @@ from src.train.checkpointing import save_checkpoint, load_checkpoint
 from src.blocks.rope import RoPE
 from src.blocks.grouped_query_attention import GQA
 from src.qwen3.transformer import TransformerBlock, Transformer
+from src.common.softmax import softmax
+from src.common.linear import Linear
 
 def run_linear(
     d_in: int,
@@ -36,8 +38,9 @@ def run_linear(
     Returns:
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
-
-    raise NotImplementedError
+    linear = Linear(d_in, d_out)
+    linear.load_state_dict({"weight": weights})
+    return linear(in_features)
 
 
 def run_embedding(
@@ -491,7 +494,7 @@ def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, "
         Float[Tensor, "..."]: Tensor of with the same shape as `in_features` with the output of
         softmax normalizing the specified `dim`.
     """
-    raise NotImplementedError
+    return softmax(in_features, dim)
 
 
 def run_cross_entropy(
