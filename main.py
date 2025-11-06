@@ -4,9 +4,9 @@ from argparse import Namespace
 from src.preprocessing.tokenizer import BPETokenizer
 from src.preprocessing.dataloader import sample_data
 from src.train.train import train
+from src.inference.generate import generate
 from src.qwen3.transformer import Transformer
 from src.train.optimizer import AdamW
-import torch
 from torch.utils.data import DataLoader
 
 def load_data(args) -> DataLoader: #TODO: check if this should be moved to /preprocessing, or split in 1.tokenizer and 2.dataloader
@@ -26,8 +26,20 @@ def train_model(args):
     print(f"Final validation loss: {val_loss}")
     print(f"Tokens seen: {tokens_seen}")
 
-def inference_model(args):
-    print("inference model...")
+def generate(args):
+    print("Generating text...")
+    model = Transformer(vocab_size=args.vocab_size, num_layers=args.num_layers, max_seq_len=args.max_seq_len, hidden_size=args.d_model, dff = args.dff, gka_ratio=args.gka_ratio, num_heads=args.num_heads,  device=args.device)
+    model.load_state_dict(torch.load(args.checkpoint_dir))
+    model.eval()
+    
+    tokenizer = BPETokenizer.from_files(args.vocab_file, args.merges_file, args.special_tokens)
+    prompt = "Hello, how are you?"
+    max_tokens = 10
+    temperature = 0.7
+    top_p = 0.9
+    
+    generated_text = generate(model, tokenizer, prompt, max_tokens, temperature, top_p)
+    print("Generated text:", generated_text)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Qwen3 Training Script")
@@ -61,4 +73,4 @@ if __name__ == "__main__":
          train_model(args)
  
     elif args.mode == "inference":
-        inference_model(args)
+        generate(args)
