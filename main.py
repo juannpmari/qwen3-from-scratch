@@ -2,25 +2,21 @@ import yaml
 import argparse
 from argparse import Namespace
 from src.preprocessing.tokenizer import BPETokenizer
-from src.preprocessing.dataloader import sample_data
+from src.train.utils import load_data
 from src.train.train import train
-from src.inference.generate import generate
+from src.inference.generate import generate_text
 from src.qwen3.transformer import Transformer
 from src.train.optimizer import AdamW
-from torch.utils.data import DataLoader
-
-def load_data(args) -> DataLoader: #TODO: check if this should be moved to /preprocessing, or split in 1.tokenizer and 2.dataloader
-    tokenizer = BPETokenizer.from_files(args.vocab_file, args.merges_file, args.special_tokens)
-    samples, targets = sample_data(args.dataset_path, args.batch_size, args.max_seq_len, args.device)
-    return DataLoader(samples, targets, batch_size=args.batch_size, shuffle=True) # CHECK
+from src.train.checkpointing import load_checkpoint
+import tiktoken
 
 def train_model(args):
     print("training model...")
-    dataloader = load_data(args)
-    model = Transformer(vocab_size=args.vocab_size, num_layers=args.num_layers, max_seq_len=args.max_seq_len, hidden_size=args.d_model, dff = args.dff, gka_ratio=args.gka_ratio, num_heads=args.num_heads,  device=args.device)
+    train_dl, val_dl = load_data(args, mode="train")
+    model = Transformer(vocab_size=args.vocab_size, num_layers=args.num_layers, context_length=args.context_length, hidden_dim=args.d_model, dff = args.dff, gka_ratio=args.gka_ratio, num_heads=args.num_heads, device=args.device)
     optimizer = AdamW(model.parameters(), lr=args.learning_rate)
     
-    train_loss, val_loss, tokens_seen = train(model, optimizer, args, dataloader)  # TODO: samples and targets should come as a torch Dataloader
+    train_loss, val_loss, tokens_seen = train(model, optimizer, args, train_dl, val_dl)
     
     print(f"Final train loss: {train_loss}")
     print(f"Final validation loss: {val_loss}")
@@ -28,46 +24,69 @@ def train_model(args):
 
 def generate(args):
     print("Generating text...")
-    model = Transformer(vocab_size=args.vocab_size, num_layers=args.num_layers, max_seq_len=args.max_seq_len, hidden_size=args.d_model, dff = args.dff, gka_ratio=args.gka_ratio, num_heads=args.num_heads,  device=args.device)
-    model.load_state_dict(torch.load(args.checkpoint_dir))
+    # test_dl = load_data(args, mode="test")
+    model = Transformer(vocab_size=args.vocab_size, num_layers=args.num_layers, context_length=args.context_length, hidden_dim=args.d_model, dff = args.dff, gka_ratio=args.gka_ratio, num_heads=args.num_heads, device=args.device)
+    optimizer = AdamW(model.parameters(), lr=args.learning_rate)
+    src = args.weights_dir
+    iteration = load_checkpoint(src, model, optimizer)
     model.eval()
     
-    tokenizer = BPETokenizer.from_files(args.vocab_file, args.merges_file, args.special_tokens)
     prompt = "Hello, how are you?"
-    max_tokens = 10
-    temperature = 0.7
-    top_p = 0.9
+    # tokenizer = BPETokenizer.from_files(args.vocab_file, args.merges_file, args.special_tokens)
+    tokenizer = tiktoken.get_encoding("gpt2")
+    max_tokens = args.max_tokens
+    temperature = args.temperature
+    top_p = args.top_p
     
-    generated_text = generate(model, tokenizer, prompt, max_tokens, temperature, top_p)
+    generated_text = generate_text(model, tokenizer, prompt, max_tokens, temperature, top_p)
     print("Generated text:", generated_text)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Qwen3 Training Script")
-    parser.add_argument("--config", type=str, default="experiments/base_config.yaml", help="Path to the configuration file")
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser(description="Qwen3 Training Script")
+    # parser.add_argument("--config", type=str, default="experiments/base_config.yaml", help="Path to the configuration file")
+    # args = parser.parse_args()
     
     # Load configuration from YAML file
-    with open(args.config, "r") as f:
+    with open("experiments/base_inf.yaml", "r") as f:
         config = yaml.safe_load(f)
     
     # Flatten the nested config structure into a single namespace
-    args = Namespace(
-        mode=config["mode"],
-        vocab_size=config["model"]["vocab_size"],
-        d_model=config["model"]["d_model"],
-        num_heads=config["model"]["num_heads"],
-        num_layers=config["model"]["num_layers"],
-        gka_ratio=config["model"]["gka_ratio"],
-        dff=config["model"]["dff"],
-        dataset_path=config["training"]["dataset_path"],
-        batch_size=config["training"]["batch_size"],
-        learning_rate=config["training"]["learning_rate"],
-        num_epochs=config["training"]["num_epochs"],
-        max_seq_len=config["training"]["max_seq_len"],
-        max_grad_norm=config["training"]["max_grad_norm"],
-        checkpoint_dir=config["training"]["checkpoint_dir"],
-        device=config["device"]
-    )
+    if config["mode"] == "train":
+        args = Namespace(
+            mode=config["mode"],
+            vocab_size=config["model"]["vocab_size"],
+            d_model=config["model"]["d_model"],
+            num_heads=config["model"]["num_heads"],
+            num_layers=config["model"]["num_layers"],
+            gka_ratio=config["model"]["gka_ratio"],
+            dff=config["model"]["dff"],
+            train_path=config["training"]["train_path"],
+            val_path=config["training"]["val_path"],
+            batch_size=config["training"]["batch_size"],
+            learning_rate=config["training"]["learning_rate"],
+            num_epochs=config["training"]["num_epochs"],
+            context_length=config["training"]["context_length"],
+            max_grad_norm=config["training"]["max_grad_norm"],
+            checkpoint_dir=config["training"]["checkpoint_dir"],
+            device=config["device"]
+        )
+    elif config["mode"] == "inference":
+        args = Namespace(
+            mode=config["mode"],
+            vocab_size=config["model"]["vocab_size"],
+            d_model=config["model"]["d_model"],
+            num_heads=config["model"]["num_heads"],
+            num_layers=config["model"]["num_layers"],
+            gka_ratio=config["model"]["gka_ratio"],
+            dff=config["model"]["dff"],
+            weights_dir=config["inference"]["weights_dir"],
+            context_length=config["inference"]["context_length"],
+            max_tokens=config["inference"]["max_tokens"],
+            temperature=config["inference"]["temperature"],
+            top_p=config["inference"]["top_p"],
+            learning_rate=config["inference"]["learning_rate"],
+            device=config["device"]
+        )
 
     if args.mode == "train":
          train_model(args)

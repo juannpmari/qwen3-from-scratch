@@ -1,27 +1,60 @@
 import numpy as np
 import torch
+from torch.utils.data import Dataset, DataLoader
+from src.preprocessing.tokenizer import BPETokenizer
+from typing import List
+import tiktoken
 
-def sample_data(x: np.ndarray, b: int, context_length: int, device: torch.device) -> (torch.Tensor, torch.Tensor):
+
+def sample_data(x: np.ndarray, batch_size: int, context_length: int, device: torch.device) -> (torch.Tensor, torch.Tensor):
     """
     Args:
         x (np.ndarray): integer array with token IDs to sample from
-        b (int): batch size
+        batch_size (int): batch size
         context_length (int): context length
         device (torch.device): device to use
     Returns:
-        (torch.Tensor, torch.Tensor): the sampled input sequences and the corresponding next-token targets (each (batch_size,context_length))
+        (torch.Tensor, torch.Tensor): the sampled input sequences and the corresponding next-token targets, each (batch_size, context_length)
     """
 
     x = torch.from_numpy(x).to(device)
     max_start_exclusive = len(x) - context_length
     
-    starts = torch.randint(0, max_start_exclusive, (b,), device=device)
+    starts = torch.randint(0, max_start_exclusive, (batch_size,), device=device)
     offsets = torch.arange(context_length, device=device).unsqueeze(0)  # (1, context_length)
-    idx = starts.unsqueeze(1) + offsets  # (b, context_length)
+    idx = starts.unsqueeze(1) + offsets  # (batch_size, context_length)
 
     samples = x[idx]
     targets = x[idx + 1]
     return samples, targets
+
+class CustomDataset(Dataset):
+    def __init__(self, txt_file: List[str], context_length: int = 256, batch_size: int = 4, device: torch.device = None):
+        data = []
+        for txt in txt_file:
+            with open(txt, 'r') as f:
+                data.append(f.read())
+        self.context_length = context_length
+        # tokenizer = BPETokenizer()
+        # token_ids = tokenizer.encode_iterable(data)
+        tokenizer = tiktoken.get_encoding("gpt2")
+        token_ids = []
+        for txt in data:
+            token_ids.extend(tokenizer.encode_ordinary(txt))#, allowed_special={"<|endoftext|>"}))
+        token_ids = np.array(token_ids) #Check
+
+        self.inputs, self.targets = sample_data(token_ids, batch_size, context_length, device)
+    
+    def __len__(self):
+        return self.inputs.shape[0]
+    
+    def __getitem__(self, idx):
+        return self.inputs[idx], self.targets[idx]
+
+def create_dataloader(txt_file: List[str], context_length: int = 256, shuffle: bool = True, batch_size: int = 4, device: torch.device = None, drop_last: bool = True):
+    dataset = CustomDataset(txt_file, context_length, batch_size)#, device)
+    return DataLoader(dataset, batch_size=batch_size, drop_last=drop_last, num_workers=2, shuffle=shuffle)
+
 
 #TODO: Fix and replace by yield to return a generator
 # Investigate how to do this more efficiently

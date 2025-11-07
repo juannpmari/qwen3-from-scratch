@@ -2,19 +2,20 @@ import torch
 import torch.nn as nn
 from src.blocks.rope import RoPE
 from src.blocks.rmsnorm import RMSNorm
+from src.common.linear import Linear
 
 class GQA(nn.Module):
     def __init__(self, context_length, hidden_dim, gka_ratio = 2, num_heads = 16, device = None):
         super().__init__()
-        self.W_Q = nn.Linear(hidden_dim, hidden_dim, bias=False) # 1024x1024 #no QKV bias in qwen3
-        self.W_K = nn.Linear(hidden_dim, hidden_dim//gka_ratio, bias=False) # 1024x512 #no QKV bias in qwen3
-        self.W_V = nn.Linear(hidden_dim, hidden_dim//gka_ratio, bias=False) # 1024x512 #no QKV bias in qwen3
+        self.W_Q = Linear(hidden_dim, hidden_dim)#, device=device) # 1024x1024 #no QKV bias in qwen3
+        self.W_K = Linear(hidden_dim, int(hidden_dim//gka_ratio))#, device=device) # 1024x512 #no QKV bias in qwen3
+        self.W_V = Linear(hidden_dim, int(hidden_dim//gka_ratio))#, device=device) # 1024x512 #no QKV bias in qwen3
         self.num_heads = num_heads
         self.head_dim = hidden_dim // num_heads
         self.gka_ratio = gka_ratio
-        self.linear_output_layer = nn.Linear(hidden_dim, hidden_dim, bias=False)
-        self.rope = RoPE(self.head_dim, context_length, device)
-        self.rmsnorm = RMSNorm(self.head_dim, device=device)
+        self.linear_output_layer = Linear(hidden_dim, hidden_dim)#, device=device)
+        self.rope = RoPE(self.head_dim, context_length)#, device)
+        self.rmsnorm = RMSNorm(self.head_dim)#, device=device)
 
         self.register_buffer("mask", torch.triu(torch.ones(context_length, context_length), diagonal=1))
 
@@ -45,7 +46,7 @@ class GQA(nn.Module):
         keys = self.rope.forward(keys, token_positions = token_positions) # batch_size x seq_len x 64 x 8
         
         #reshape for attention computation
-        queries = queries.view(batch_size, seq_len, self.head_dim, self.num_heads//self.gka_ratio, self.gka_ratio) # batch_size x seq_len x 64 x 8 x 2
+        queries = queries.view(batch_size, seq_len, self.head_dim, int(self.num_heads//self.gka_ratio), self.gka_ratio) # batch_size x seq_len x 64 x 8 x 2
         keys = keys.unsqueeze(-1) # batch_size x seq_len x 64 x 8 x 1
         keys = keys.transpose(1,2) # batch_size x 64 x seq_len x 8 x 1
         queries = queries.permute(0, 3, 4, 1, 2)  # [batch_size, 8,2, seq_len, 64]

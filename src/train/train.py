@@ -1,22 +1,20 @@
-# Training loop
-
 import argparse
-from src.qwen3.transformer import Transformer
-from src.train.optimizer import AdamW
-from src.train.loss import compute_cross_entropy
-from src.train.checkpointing import save_checkpoint, load_checkpoint
-from src.train.optimizer import clip_gradients, cosine_annealing_lr_scheduler
+from src.train.loss import compute_cross_entropy_batch
+from src.train.checkpointing import save_checkpoint
+from src.train.optimizer import clip_gradients
+import torch.nn as nn
+import torch.optim as optim
+import os
 
-
-def train(model:nn.Module, optimizer:nn.optim.Optimizer, args: argparse.Namespace, train_loader, val_loader):
+def train(model:nn.Module, optimizer:optim.Optimizer, args: argparse.Namespace, train_dl, val_dl):
     tokens_seen, global_steps = 0,0
     for epoch in range(args.num_epochs):
-        for input, target in train_loader:
+        for input, target in train_dl:
             optimizer.zero_grad()
-            logits = transformer(input)
-            loss = compute_cross_entropy(logits, target)
+            logits = model(input)
+            loss = compute_cross_entropy_batch(logits, target)
             loss.backward() # CHECK
-            clip_gradients(transformer.parameters(), args.max_grad_norm)
+            clip_gradients(model.parameters(), args.max_grad_norm)
             optimizer.step()
             tokens_seen += len(input)
             global_steps += 1
@@ -24,9 +22,11 @@ def train(model:nn.Module, optimizer:nn.optim.Optimizer, args: argparse.Namespac
             if global_steps % 10 == 0:
                 print(f"Epoch {epoch}, Global Steps: {global_steps}")
                 print(f"Training loss: {loss.item()}")
-                val_logits = transformer(val_loader)
-                val_loss = compute_cross_entropy(val_logits, val_loader) #CHECK: use torch.no_grad() ?
+                for input_val, target_val in val_dl:
+                    val_logits = model(input_val)
+                    val_loss = compute_cross_entropy_batch(val_logits, target_val)
                 print(f"Validation Loss: {val_loss.item()}")
-                
-                save_checkpoint(transformer, optimizer, epoch, args.checkpoint_dir)
+                os.makedirs(args.checkpoint_dir, exist_ok=True)
+                save_checkpoint(model, optimizer, epoch, os.path.join(args.checkpoint_dir, f"checkpoint_{epoch}.pt"))
+            print(f"Training loss: {loss.item()}")
     return loss, val_loss, tokens_seen

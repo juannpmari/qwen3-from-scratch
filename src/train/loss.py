@@ -16,5 +16,18 @@ def compute_cross_entropy(logits: torch.Tensor, targets: torch.Tensor) -> torch.
         ce[b] = -target_log_prob
     return ce.mean()  #scalar
 
+#uv run pytest -k test_cross_entropy
 
-    #uv run pytest -k test_cross_entropy
+def compute_cross_entropy_batch(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+    """
+    logits: (batch_size, vocab_size)
+    targets: (batch_size,) IDs of the target tokens
+
+    Returns:
+        ce: scalar; avg cross entropy for the sequences in the batch
+    """
+    ce = 0
+    for token_idx in range(logits.shape[1]):
+        ce += compute_cross_entropy(logits[:, token_idx,:], targets[:, token_idx])
+    return ce / logits.shape[1]
+    

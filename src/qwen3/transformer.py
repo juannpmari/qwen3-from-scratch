@@ -50,7 +50,7 @@ class Transformer(nn.Module):
         """
         super().__init__()
         self.token_embedding = Embedding(vocab_size, hidden_dim)
-        self.transformer_blocks = nn.ModuleList([TransformerBlock(hidden_dim, context_length, dff, gka_ratio, num_heads, device) for _ in range(num_layers)])
+        self.transformer_blocks = nn.ModuleList([TransformerBlock(hidden_dim, context_length, dff, gka_ratio, num_heads, device = device) for _ in range(num_layers)])
         self.rmsnorm = RMSNorm(hidden_dim, device = device)
         self.output_layer = Linear(hidden_dim, vocab_size) #CHECK: qwen3 uses tied embeddings
 

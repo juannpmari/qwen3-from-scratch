@@ -1,0 +1,25 @@
+# Training Configuration
+mode: train  # Options: train, inference
+
+# Model Architecture
+model:
+  vocab_size: 50257
+  d_model: 128
+  num_heads: 8
+  num_layers: 6
+  gka_ratio: 1
+  dff: 512
+
+# Training Parameters
+training:
+  train_path: data/train
+  val_path: data/validation
+  batch_size: 16
+  learning_rate: 0.0001
+  num_epochs: 10
+  context_length: 128
+  max_grad_norm: 1.0
+  checkpoint_dir: checkpoints
+
+# Device Configuration
+device: cuda

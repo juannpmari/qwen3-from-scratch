@@ -1,0 +1,24 @@
+# Training Configuration
+mode: inference  # Options: train, inference
+
+# Model Architecture
+model:
+  vocab_size: 50257
+  d_model: 128
+  num_heads: 8
+  num_layers: 6
+  gka_ratio: 1
+  dff: 512
+
+# Training Parameters
+inference:
+  weights_dir: checkpoints/checkpoint_9.pt
+  context_length: 128
+  max_tokens: 10
+  temperature: 0.7
+  top_p: 0.9
+  learning_rate: 0.0001
+
+
+# Device Configuration
+device: cuda
