@@ -14,15 +14,15 @@ model:
 training:
   train_path: data/tokenized/train/tokens.npy
   val_path: data/tokenized/validation/tokens.npy
-  batch_size: 32
-  sample_size: 4900
+  batch_size: 4
+  sample_size: 32
   learning_rate: 0.0001
-  num_epochs: 1
+  num_epochs: 10
   context_length: 256
   max_grad_norm: 1.0
   checkpoint_dir: checkpoints
-  checkpoint_interval: 150
+  checkpoint_interval: 10
   dtype: float32
 
 # Device Configuration
-device: cpu
+device: mps
