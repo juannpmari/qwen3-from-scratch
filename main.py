@@ -2,7 +2,7 @@ import yaml
 import argparse
 from argparse import Namespace
 from src.preprocessing.tokenizer import BPETokenizer
-from src.train.utils import load_data
+from src.train.utils import load_data, plot_losses
 from src.train.train import train
 from src.inference.generate import generate_text
 from src.qwen3.transformer import Transformer
@@ -19,11 +19,16 @@ def train_model(args):
     model.train()
     optimizer = AdamW(model.parameters(), lr=args.learning_rate)
         
-    train_loss, val_loss, tokens_seen = train(model, optimizer, args, train_dl, val_dl, device)
+    train_loss, val_loss, tokens_seen, global_steps, checkpoint_dir = train(model, optimizer, args, train_dl, val_dl, device)
     
+    with open(f"{checkpoint_dir}/config.yaml", "w") as f:
+        yaml.dump(args, f)
+
     print(f"Final train loss: {train_loss}")
     print(f"Final validation loss: {val_loss}")
     print(f"Tokens seen: {tokens_seen}")
+    plot_losses(range(global_steps), train_loss, f"{checkpoint_dir}/train_loss.png")
+    # plot_losses(range(global_steps), val_loss, f"{checkpoint_dir}/val_loss.png")
 
 def generate(args):
     print("Generating text...")

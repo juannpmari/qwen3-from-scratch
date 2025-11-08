@@ -1,4 +1,7 @@
 test.ipynb
-*/__pycache__
 TODO
 *.pdf
+*.png
+*.pt
+__pycache__
+uv.lock
