@@ -10,6 +10,7 @@ from src.train.optimizer import AdamW
 from src.train.checkpointing import load_checkpoint
 import tiktoken
 import time
+import torch
 
 DTYPE_MAP = {
     "float32": torch.float32,
@@ -108,7 +109,7 @@ if __name__ == "__main__":
             checkpoint_interval=config["training"]["checkpoint_interval"],
             sample_size=config["training"]["sample_size"],
             device=config["device"],
-            dtype=config["dtype"]
+            dtype=config["training"]["dtype"]
         )
     elif config["mode"] == "inference":
         args = Namespace(

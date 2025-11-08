@@ -12,8 +12,8 @@ model:
 
 # Training Parameters
 training:
-  train_path: data/train
-  val_path: data/validation
+  train_path: data/tokenized/train/tokens.npy
+  val_path: data/tokenized/validation/tokens.npy
   batch_size: 32
   sample_size: 4900
   learning_rate: 0.0001
