@@ -28,7 +28,7 @@ def sample_data(x: np.ndarray, sample_size: int, context_length: int, device: to
     return samples.to(device=device, dtype=dtype), targets.to(device=device, dtype=dtype)
     #test: uv run pytest -k test_get_batch
 
-class CustomDataset(Dataset):
+class CustomDataset(Dataset):  #TODO: this could be an IterableDataset, that streams the data instead of loading it all at once
     def __init__(self, tokens_path: str, context_length: int = 256, sample_size: int = 10):
         token_ids = np.load(tokens_path, mmap_mode='r')
         self.inputs, self.targets = sample_data(token_ids, sample_size, context_length)
