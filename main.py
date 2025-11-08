@@ -9,6 +9,7 @@ from src.qwen3.transformer import Transformer
 from src.train.optimizer import AdamW
 from src.train.checkpointing import load_checkpoint
 import tiktoken
+import time
 
 def train_model(args):
     print("training model...")
@@ -18,15 +19,25 @@ def train_model(args):
     model.to(device)
     model.train()
     optimizer = AdamW(model.parameters(), lr=args.learning_rate)
-        
+    
+    timer = time.time()
     train_loss, val_loss, tokens_seen, global_steps, checkpoint_dir = train(model, optimizer, args, train_dl, val_dl, device)
+    timer = time.time() - timer
     
     with open(f"{checkpoint_dir}/config.yaml", "w") as f:
         yaml.dump(args, f)
 
+    with open(f"{checkpoint_dir}/summary.txt", "w") as f:
+        f.write(f"Final train loss: {train_loss[-1]}\n")
+        f.write(f"Final validation loss: {val_loss[-1]}\n")
+        f.write(f"Tokens seen: {tokens_seen}\n")
+        f.write(f"Time taken: {timer}\n")
+        f.write(f"Global steps: {global_steps}\n")
+
     print(f"Final train loss: {train_loss}")
     print(f"Final validation loss: {val_loss}")
     print(f"Tokens seen: {tokens_seen}")
+    print(f"Time taken: {timer}")
     plot_losses(range(global_steps), train_loss, f"{checkpoint_dir}/train_loss.png")
     # plot_losses(range(global_steps), val_loss, f"{checkpoint_dir}/val_loss.png")
 

@@ -9,7 +9,7 @@ import os
 from datetime import datetime
 
 def train(model:nn.Module, optimizer:optim.Optimizer, args: argparse.Namespace, train_dl, val_dl, device:torch.device = None):
-    tokens_seen, global_steps = [],0
+    tokens_seen, global_steps = 0,0
     track_train_loss = []
     track_val_loss = []
     checkpoint_dir = os.path.join(args.checkpoint_dir, f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}")
@@ -24,7 +24,7 @@ def train(model:nn.Module, optimizer:optim.Optimizer, args: argparse.Namespace, 
             loss.backward() # CHECK
             clip_gradients(model.parameters(), args.max_grad_norm)
             optimizer.step()
-            tokens_seen.append(len(input))
+            tokens_seen += len(input)
             global_steps += 1
             track_train_loss.append(loss.item())
             print(f"Training loss: {loss.item()}")
