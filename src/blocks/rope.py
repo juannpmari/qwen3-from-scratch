@@ -20,17 +20,17 @@ class RoPE(nn.Module):
    
     def forward(self, x: torch.tensor, token_positions: torch.tensor): #check token_position
         """
-        x: q or k of shape (batch_size, seq_len, head_dim, num_heads)
-        token_positions: (batch_size, seq_len) Position of the tokens in the sequence
-        returns: q or k of shape (batch_size, seq_len, head_dim, num_heads)
+        x: q or k of shape (batch_size, context_length, head_dim, num_heads)
+        token_positions: (batch_size, context_length) Position of the tokens in the sequence
+        returns: q or k of shape (batch_size, context_length, head_dim, num_heads)
         """
         
 
-        # seq_len = x.shape[1]
+        # context_length = x.shape[1]
         x = x.permute(0,3,1,2)
         
-        x_even = x[..., 0::2] #batch_size x num_heads x seq_len x head_dim//2
-        x_odd = x[..., 1::2] #batch_size x num_heads x seq_len x head_dim//2
+        x_even = x[..., 0::2] #batch_size x num_heads x context_length x head_dim//2
+        x_odd = x[..., 1::2] #batch_size x num_heads x context_length x head_dim//2
 
         x_even_rot = x_even * self.cos_tensor[token_positions] - x_odd * self.sin_tensor[token_positions]
         x_odd_rot = x_even * self.sin_tensor[token_positions] + x_odd * self.cos_tensor[token_positions]

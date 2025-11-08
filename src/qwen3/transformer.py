@@ -24,7 +24,7 @@ class TransformerBlock(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        x: inputs of shape (batch_size, seq_len, hidden_dim)
+        x: inputs of shape (batch_size, context_length, hidden_dim)
         """
         residual = x
         x = self.rmsnorm_1(x)

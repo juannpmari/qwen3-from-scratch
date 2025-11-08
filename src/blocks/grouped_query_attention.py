@@ -21,57 +21,57 @@ class GQA(nn.Module):
 
     def forward(self, x, token_positions = None):
         """
-        x: inputs of shape (batch_size, seq_len, hidden_dim)
+        x: inputs of shape (batch_size, context_length, hidden_dim)
         token_positions: optional tensor with the positions of the tokens
         """
-        batch_size, seq_len, hidden_dim = x.shape # batch_size x seq_len x 1024
+        batch_size, context_length, hidden_dim = x.shape # batch_size x context_length x 1024
 
         #compute Q, K, V matrices
-        queries = self.W_Q(x) # my_linear.forward(x) -> tensor: batch_size x seq_len x 1024
-        keys = self.W_K(x) # my_linear.forward(x) -> tensor: batch_size x seq_len x 512
-        values = self.W_V(x) # my_linear.forward(x) -> tensor: batch_size x seq_len x 512
+        queries = self.W_Q(x) # my_linear.forward(x) -> tensor: batch_size x context_length x 1024
+        keys = self.W_K(x) # my_linear.forward(x) -> tensor: batch_size x context_length x 512
+        values = self.W_V(x) # my_linear.forward(x) -> tensor: batch_size x context_length x 512
 
         #split into heads
-        queries = queries.view(batch_size, seq_len, self.head_dim, self.num_heads) # batch_size x seq_len x 64 x 16
-        keys = keys.view(batch_size, seq_len, self.head_dim, self.num_heads//self.gka_ratio) # batch_size x seq_len x 64 x 8
-        values = values.view(batch_size, seq_len, self.head_dim, self.num_heads//self.gka_ratio) # batch_size x seq_len x 64 x 8
+        queries = queries.view(batch_size, context_length, self.head_dim, self.num_heads) # batch_size x context_length x 64 x 16
+        keys = keys.view(batch_size, context_length, self.head_dim, self.num_heads//self.gka_ratio) # batch_size x context_length x 64 x 8
+        values = values.view(batch_size, context_length, self.head_dim, self.num_heads//self.gka_ratio) # batch_size x context_length x 64 x 8
 
         #normalize QK (CHECK THIS) 
-        queries = self.rmsnorm.forward(queries.permute(0, 3, 1, 2)).permute(0, 2, 3, 1) # batch_size x seq_len x 64 x 16, normalize across hidden dimensions
-        keys = self.rmsnorm.forward(keys.permute(0, 3, 1, 2)).permute(0, 2, 3, 1) # batch_size x seq_len x 64 x 8, normalize across hidden dimensions
+        queries = self.rmsnorm.forward(queries.permute(0, 3, 1, 2)).permute(0, 2, 3, 1) # batch_size x context_length x 64 x 16, normalize across hidden dimensions
+        keys = self.rmsnorm.forward(keys.permute(0, 3, 1, 2)).permute(0, 2, 3, 1) # batch_size x context_length x 64 x 8, normalize across hidden dimensions
 
         #Compute RoPE embeddings
-        token_positions = torch.arange(seq_len) if token_positions is None else token_positions
-        queries = self.rope.forward(queries, token_positions = token_positions) # batch_size x seq_len x 64 x 16
-        keys = self.rope.forward(keys, token_positions = token_positions) # batch_size x seq_len x 64 x 8
+        token_positions = torch.arange(context_length) if token_positions is None else token_positions
+        queries = self.rope.forward(queries, token_positions = token_positions) # batch_size x context_length x 64 x 16
+        keys = self.rope.forward(keys, token_positions = token_positions) # batch_size x context_length x 64 x 8
         
         #reshape for attention computation
-        queries = queries.view(batch_size, seq_len, self.head_dim, int(self.num_heads//self.gka_ratio), self.gka_ratio) # batch_size x seq_len x 64 x 8 x 2
-        keys = keys.unsqueeze(-1) # batch_size x seq_len x 64 x 8 x 1
-        keys = keys.transpose(1,2) # batch_size x 64 x seq_len x 8 x 1
-        queries = queries.permute(0, 3, 4, 1, 2)  # [batch_size, 8,2, seq_len, 64]
-        keys = keys.permute(0, 3, 4, 1, 2) # batch_size x 8 x 1 x 64 x seq_len
+        queries = queries.view(batch_size, context_length, self.head_dim, int(self.num_heads//self.gka_ratio), self.gka_ratio) # batch_size x context_length x 64 x 8 x 2
+        keys = keys.unsqueeze(-1) # batch_size x context_length x 64 x 8 x 1
+        keys = keys.transpose(1,2) # batch_size x 64 x context_length x 8 x 1
+        queries = queries.permute(0, 3, 4, 1, 2)  # [batch_size, 8,2, context_length, 64]
+        keys = keys.permute(0, 3, 4, 1, 2) # batch_size x 8 x 1 x 64 x context_length
 
         #compute attention scores
-        attn_scores = queries @ keys #batch_size x 8 x 2 x seq_len x seq_len
-        mask = self.mask[:seq_len, :seq_len].bool()
+        attn_scores = queries @ keys #batch_size x 8 x 2 x context_length x context_length
+        mask = self.mask[:context_length, :context_length].bool()
         attn_scores = attn_scores.masked_fill(mask, -float('inf'))
                         
         #compute attention weights
-        attn_weights = torch.softmax(attn_scores/(self.head_dim**0.5), dim=-1) # batch_size x 8 x 2 x seq_len x seq_len
+        attn_weights = torch.softmax(attn_scores/(self.head_dim**0.5), dim=-1) # batch_size x 8 x 2 x context_length x context_length
 
         #compute context vector
-        values = values.unsqueeze(-1) # batch_size x seq_len x 64 x 8 x 1
-        values = values.permute(0,3,4,1,2) # batch_size x 8 x 1 x seq_len x 64
-        context_vector = attn_weights @ values # batch_size x 8 x 2 x seq_len x 64
-        context_vector = context_vector.view(batch_size, self.num_heads, seq_len, hidden_dim//self.num_heads) # batch_size x 16 x seq_len x 64
-        context_vector = context_vector.permute(0,2,1,3) # batch_size x seq_len x 16 x 64
+        values = values.unsqueeze(-1) # batch_size x context_length x 64 x 8 x 1
+        values = values.permute(0,3,4,1,2) # batch_size x 8 x 1 x context_length x 64
+        context_vector = attn_weights @ values # batch_size x 8 x 2 x context_length x 64
+        context_vector = context_vector.view(batch_size, self.num_heads, context_length, hidden_dim//self.num_heads) # batch_size x 16 x context_length x 64
+        context_vector = context_vector.permute(0,2,1,3) # batch_size x context_length x 16 x 64
         
         #concatenate heads
-        context_vector = context_vector.reshape(batch_size, seq_len, hidden_dim) # batch_size x seq_len x 1024
+        context_vector = context_vector.reshape(batch_size, context_length, hidden_dim) # batch_size x context_length x 1024
 
         #apply linear output layer
-        context_vector = self.linear_output_layer(context_vector) # batch_size x seq_len x 1024
+        context_vector = self.linear_output_layer(context_vector) # batch_size x context_length x 1024
         
         return context_vector
         
