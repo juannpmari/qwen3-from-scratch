@@ -6,3 +6,6 @@ TODO
 __pycache__
 uv.lock
 checkpoints
+*/data
+data/**
+data_verdict/**

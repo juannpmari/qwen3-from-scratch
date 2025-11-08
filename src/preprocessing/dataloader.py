@@ -26,23 +26,11 @@ def sample_data(x: np.ndarray, sample_size: int, context_length: int, device: to
     samples = x[idx]
     targets = x[idx + 1]
     return samples.to(device=device, dtype=dtype), targets.to(device=device, dtype=dtype)
+    #test: uv run pytest -k test_get_batch
 
 class CustomDataset(Dataset):
     def __init__(self, tokens_path: str, context_length: int = 256, sample_size: int = 10):
-        # data = []
-        # for txt in txt_file:
-        #     with open(txt, 'r') as f:
-        #         data.append(f.read())
-        # self.context_length = context_length
-        # # tokenizer = BPETokenizer()
-        # # token_ids = tokenizer.encode_iterable(data)
-        # tokenizer = tiktoken.get_encoding("gpt2")
-        # token_ids = []
-        # for txt in data: #TODO: optimize this for large datasets
-        #     token_ids.extend(tokenizer.encode_ordinary(txt))#, allowed_special={"<|endoftext|>"}))
-        # token_ids = np.array(token_ids) #Check
         token_ids = np.load(tokens_path, mmap_mode='r')
-
         self.inputs, self.targets = sample_data(token_ids, sample_size, context_length)
     
     def __len__(self):
@@ -56,9 +44,5 @@ def create_dataloader(tokens_path: str, context_length: int = 256, shuffle: bool
     return DataLoader(dataset, batch_size=batch_size, drop_last=drop_last, num_workers=2, shuffle=shuffle)
 
 
-#TODO: Fix and replace by yield to return a generator
-# Investigate how to do this more efficiently
-# Use np.memmap or the flag mmap_mode='r' to np.load when loading the dataset
 
 
-#test: uv run pytest -k test_get_batch
