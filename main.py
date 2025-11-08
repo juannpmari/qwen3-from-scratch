@@ -13,10 +13,13 @@ import tiktoken
 def train_model(args):
     print("training model...")
     train_dl, val_dl = load_data(args, mode="train")
-    model = Transformer(vocab_size=args.vocab_size, num_layers=args.num_layers, context_length=args.context_length, hidden_dim=args.d_model, dff = args.dff, gka_ratio=args.gka_ratio, num_heads=args.num_heads, device=args.device)
+    model = Transformer(vocab_size=args.vocab_size, num_layers=args.num_layers, context_length=args.context_length, hidden_dim=args.d_model, dff = args.dff, gka_ratio=args.gka_ratio, num_heads=args.num_heads)
+    device = args.device
+    model.to(device)
+    model.train()
     optimizer = AdamW(model.parameters(), lr=args.learning_rate)
-    
-    train_loss, val_loss, tokens_seen = train(model, optimizer, args, train_dl, val_dl)
+        
+    train_loss, val_loss, tokens_seen = train(model, optimizer, args, train_dl, val_dl, device)
     
     print(f"Final train loss: {train_loss}")
     print(f"Final validation loss: {val_loss}")
@@ -31,7 +34,9 @@ def generate(args):
     iteration = load_checkpoint(src, model, optimizer)
     model.eval()
     
-    prompt = "Hello, how are you?"
+    prompt = """I HAD always thought Jack Gisburn rather a cheap genius--though a good fellow enough--so it was no great surprise to me to hear that, in the height of his glory, he had dropped his painting, married a rich widow, and established himself in a villa on the Riviera. (Though I rather thought it would have been Rome or Florence.)
+
+    "The height of his glory"--"""
     # tokenizer = BPETokenizer.from_files(args.vocab_file, args.merges_file, args.special_tokens)
     tokenizer = tiktoken.get_encoding("gpt2")
     max_tokens = args.max_tokens
@@ -47,7 +52,8 @@ if __name__ == "__main__":
     # args = parser.parse_args()
     
     # Load configuration from YAML file
-    with open("experiments/base_inf.yaml", "r") as f:
+    with open("experiments/base_train.yaml", "r") as f:
+    # with open("experiments/base_inf.yaml", "r") as f:
         config = yaml.safe_load(f)
     
     # Flatten the nested config structure into a single namespace
@@ -68,6 +74,7 @@ if __name__ == "__main__":
             context_length=config["training"]["context_length"],
             max_grad_norm=config["training"]["max_grad_norm"],
             checkpoint_dir=config["training"]["checkpoint_dir"],
+            checkpoint_interval=config["training"]["checkpoint_interval"],
             device=config["device"]
         )
     elif config["mode"] == "inference":

@@ -7,7 +7,7 @@ from src.common.linear import Linear
 from src.common.embedding import Embedding
 
 class TransformerBlock(nn.Module):
-    def __init__(self, hidden_dim: int, context_length: int, dff: int, gka_ratio: int = 2, num_heads: int = 16, device: torch.device | None = None):
+    def __init__(self, hidden_dim: int, context_length: int, dff: int, gka_ratio: int = 2, num_heads: int = 16):
         """
         hidden_dim: hidden dimension of the model
         context_length: length of the context
@@ -17,10 +17,10 @@ class TransformerBlock(nn.Module):
         device: device to run on
         """
         super().__init__()
-        self.rmsnorm_1 = RMSNorm(hidden_dim, device = device)
-        self.gqa = GQA(context_length, hidden_dim, gka_ratio, num_heads, device = device)
-        self.rmsnorm_2 = RMSNorm(hidden_dim, device = device)
-        self.ff = SwigluFeedForward(hidden_dim, dff, device = device)
+        self.rmsnorm_1 = RMSNorm(hidden_dim)
+        self.gqa = GQA(context_length, hidden_dim, gka_ratio, num_heads)
+        self.rmsnorm_2 = RMSNorm(hidden_dim)
+        self.ff = SwigluFeedForward(hidden_dim, dff)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -37,7 +37,7 @@ class TransformerBlock(nn.Module):
         return x
 
 class Transformer(nn.Module):
-    def __init__(self, vocab_size: int, num_layers: int, context_length: int, hidden_dim: int, dff: int, gka_ratio: int = 2, num_heads: int = 16, device: torch.device | None = None):
+    def __init__(self, vocab_size: int, num_layers: int, context_length: int, hidden_dim: int, dff: int, gka_ratio: int = 2, num_heads: int = 16):
         """
         vocab_size: size of the vocabulary
         num_layers: number of layers
@@ -50,8 +50,8 @@ class Transformer(nn.Module):
         """
         super().__init__()
         self.token_embedding = Embedding(vocab_size, hidden_dim)
-        self.transformer_blocks = nn.ModuleList([TransformerBlock(hidden_dim, context_length, dff, gka_ratio, num_heads, device = device) for _ in range(num_layers)])
-        self.rmsnorm = RMSNorm(hidden_dim, device = device)
+        self.transformer_blocks = nn.ModuleList([TransformerBlock(hidden_dim, context_length, dff, gka_ratio, num_heads) for _ in range(num_layers)])
+        self.rmsnorm = RMSNorm(hidden_dim)
         self.output_layer = Linear(hidden_dim, vocab_size) #CHECK: qwen3 uses tied embeddings
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
