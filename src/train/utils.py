@@ -7,12 +7,12 @@ def load_data(args, mode="train") -> (torch.utils.data.DataLoader, torch.utils.d
     if mode == "train":
         train_paths = [os.path.join(args.train_path, f) for f in os.listdir(args.train_path)]
         val_paths = [os.path.join(args.val_path, f) for f in os.listdir(args.val_path)]
-        train_dl = create_dataloader(train_paths, args.batch_size, args.context_length)
-        val_dl = create_dataloader(val_paths, args.batch_size, args.context_length)
+        train_dl = create_dataloader(train_paths, batch_size=args.batch_size, context_length=args.context_length, sample_size=args.sample_size)
+        val_dl = create_dataloader(val_paths, batch_size=args.batch_size, context_length=args.context_length, sample_size=args.sample_size//10)
         return train_dl, val_dl
     elif mode == "test":
         test_paths = [os.path.join(args.test_path, f) for f in os.listdir(args.test_path)]
-        test_dl = create_dataloader(test_paths, args.batch_size, args.context_length)
+        test_dl = create_dataloader(test_paths, batch_size=args.batch_size, context_length=args.context_length, sample_size=args.sample_size)
         return test_dl
 
 def plot_losses(epochs_seen, loss: list[float], save_path:str):

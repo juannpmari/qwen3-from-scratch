@@ -62,12 +62,11 @@ def _sample(probs: torch.Tensor, top_p: float) -> torch.Tensor:
         return sampled_tokens.squeeze(0)  # return scalar tensor
     return sampled_tokens  # (batch_size,)
 
-def generate_text(model:nn.Module, tokenizer:BPETokenizer, prompt: str, max_tokens: int, temperature: float, top_p: float):
-    device = next(model.parameters()).device
+def generate_text(model:nn.Module, tokenizer:BPETokenizer, prompt: str, max_tokens: int, temperature: float, top_p: float, device: torch.device):
     generated_tokens = 0
     end_of_sequence = False
     token_ids = tokenizer.encode(prompt)
-    
+        
     token_ids = torch.tensor(token_ids).unsqueeze(0).to(device)
     while generated_tokens < max_tokens and not end_of_sequence:
         logits = model(token_ids)

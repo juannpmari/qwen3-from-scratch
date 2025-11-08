@@ -5,3 +5,4 @@ TODO
 *.pt
 __pycache__
 uv.lock
+checkpoints

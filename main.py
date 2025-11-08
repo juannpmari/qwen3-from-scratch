@@ -11,12 +11,24 @@ from src.train.checkpointing import load_checkpoint
 import tiktoken
 import time
 
+DTYPE_MAP = {
+    "float32": torch.float32,
+    "float": torch.float32,
+    "fp32": torch.float32,
+    "float16": torch.float16,
+    "half": torch.float16,
+    "fp16": torch.float16,
+    "bfloat16": torch.bfloat16,
+    "bf16": torch.bfloat16,
+}
+
 def train_model(args):
     print("training model...")
     train_dl, val_dl = load_data(args, mode="train")
     model = Transformer(vocab_size=args.vocab_size, num_layers=args.num_layers, context_length=args.context_length, hidden_dim=args.d_model, dff = args.dff, gka_ratio=args.gka_ratio, num_heads=args.num_heads)
     device = args.device
-    model.to(device)
+    dtype = DTYPE_MAP.get(args.dtype, torch.float32)
+    model.to(device = device, dtype = dtype)
     model.train()
     optimizer = AdamW(model.parameters(), lr=args.learning_rate)
     
@@ -44,10 +56,13 @@ def train_model(args):
 def generate(args):
     print("Generating text...")
     # test_dl = load_data(args, mode="test")
-    model = Transformer(vocab_size=args.vocab_size, num_layers=args.num_layers, context_length=args.context_length, hidden_dim=args.d_model, dff = args.dff, gka_ratio=args.gka_ratio, num_heads=args.num_heads, device=args.device)
+    model = Transformer(vocab_size=args.vocab_size, num_layers=args.num_layers, context_length=args.context_length, hidden_dim=args.d_model, dff = args.dff, gka_ratio=args.gka_ratio, num_heads=args.num_heads)
     optimizer = AdamW(model.parameters(), lr=args.learning_rate)
     src = args.weights_dir
     iteration = load_checkpoint(src, model, optimizer)
+    device = args.device
+    dtype = DTYPE_MAP.get(args.dtype, torch.float32)
+    model.to(device = device, dtype = dtype)
     model.eval()
     
     prompt = """I HAD always thought Jack Gisburn rather a cheap genius--though a good fellow enough--so it was no great surprise to me to hear that, in the height of his glory, he had dropped his painting, married a rich widow, and established himself in a villa on the Riviera. (Though I rather thought it would have been Rome or Florence.)
@@ -59,7 +74,7 @@ def generate(args):
     temperature = args.temperature
     top_p = args.top_p
     
-    generated_text = generate_text(model, tokenizer, prompt, max_tokens, temperature, top_p)
+    generated_text = generate_text(model, tokenizer, prompt, max_tokens, temperature, top_p, device)
     print("Generated text:", generated_text)
 
 if __name__ == "__main__":
@@ -91,7 +106,9 @@ if __name__ == "__main__":
             max_grad_norm=config["training"]["max_grad_norm"],
             checkpoint_dir=config["training"]["checkpoint_dir"],
             checkpoint_interval=config["training"]["checkpoint_interval"],
-            device=config["device"]
+            sample_size=config["training"]["sample_size"],
+            device=config["device"],
+            dtype=config["dtype"]
         )
     elif config["mode"] == "inference":
         args = Namespace(
@@ -108,7 +125,9 @@ if __name__ == "__main__":
             temperature=config["inference"]["temperature"],
             top_p=config["inference"]["top_p"],
             learning_rate=config["inference"]["learning_rate"],
-            device=config["device"]
+            sample_size=config["inference"]["sample_size"],
+            device=config["device"],
+            dtype=config["dtype"]
         )
 
     if args.mode == "train":

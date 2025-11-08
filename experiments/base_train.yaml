@@ -4,23 +4,25 @@ mode: train  # Options: train, inference
 # Model Architecture
 model:
   vocab_size: 50257
-  d_model: 128
-  num_heads: 8
-  num_layers: 6
+  d_model: 512
+  num_heads: 16
+  num_layers: 4
   gka_ratio: 1
-  dff: 512
+  dff: 1344
 
 # Training Parameters
 training:
   train_path: data/train
   val_path: data/validation
-  batch_size: 16
+  batch_size: 32
+  sample_size: 4900
   learning_rate: 0.0001
-  num_epochs: 10
+  num_epochs: 1
   context_length: 256
   max_grad_norm: 1.0
   checkpoint_dir: checkpoints
-  checkpoint_interval: 10
+  checkpoint_interval: 150
+  dtype: float32
 
 # Device Configuration
-device: mps
+device: cpu

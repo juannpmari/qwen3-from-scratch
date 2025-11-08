@@ -27,11 +27,10 @@ def train(model:nn.Module, optimizer:optim.Optimizer, args: argparse.Namespace, 
             tokens_seen += len(input)
             global_steps += 1
             track_train_loss.append(loss.item())
-            print(f"Training loss: {loss.item()}")
+            print(f"Global Steps: {global_steps}, Training loss: {loss.item()}")
             
             if global_steps % args.checkpoint_interval == 0:
                 print(f"Epoch {epoch}, Global Steps: {global_steps}")
-                print(f"Training loss: {loss.item()}")
                 val_loss = 0
                 for input_val, target_val in val_dl:
                     input_val = input_val.to(device)

@@ -5,17 +5,17 @@ from src.blocks.rmsnorm import RMSNorm
 from src.common.linear import Linear
 
 class GQA(nn.Module):
-    def __init__(self, context_length, hidden_dim, gka_ratio = 2, num_heads = 16, device = None):
+    def __init__(self, context_length, hidden_dim, gka_ratio = 2, num_heads = 16):
         super().__init__()
-        self.W_Q = Linear(hidden_dim, hidden_dim)#, device=device) # 1024x1024 #no QKV bias in qwen3
-        self.W_K = Linear(hidden_dim, int(hidden_dim//gka_ratio))#, device=device) # 1024x512 #no QKV bias in qwen3
-        self.W_V = Linear(hidden_dim, int(hidden_dim//gka_ratio))#, device=device) # 1024x512 #no QKV bias in qwen3
+        self.W_Q = Linear(hidden_dim, hidden_dim) # 1024x1024 #no QKV bias in qwen3
+        self.W_K = Linear(hidden_dim, int(hidden_dim//gka_ratio)) # 1024x512 #no QKV bias in qwen3
+        self.W_V = Linear(hidden_dim, int(hidden_dim//gka_ratio)) # 1024x512 #no QKV bias in qwen3
         self.num_heads = num_heads
         self.head_dim = hidden_dim // num_heads
         self.gka_ratio = gka_ratio
-        self.linear_output_layer = Linear(hidden_dim, hidden_dim)#, device=device)
-        self.rope = RoPE(self.head_dim, context_length)#, device)
-        self.rmsnorm = RMSNorm(self.head_dim)#, device=device)
+        self.linear_output_layer = Linear(hidden_dim, hidden_dim)
+        self.rope = RoPE(self.head_dim, context_length)
+        self.rmsnorm = RMSNorm(self.head_dim)
 
         self.register_buffer("mask", torch.triu(torch.ones(context_length, context_length), diagonal=1))
 
