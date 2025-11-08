@@ -21,7 +21,7 @@ def train(model:nn.Module, optimizer:optim.Optimizer, args: argparse.Namespace, 
             optimizer.zero_grad()
             logits = model(input)
             loss = compute_cross_entropy_batch(logits, target)
-            loss.backward() # CHECK
+            loss.backward() # CHECK; here it gets stuck
             clip_gradients(model.parameters(), args.max_grad_norm)
             optimizer.step()
             tokens_seen += len(input)

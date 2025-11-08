@@ -12,8 +12,8 @@ class RoPE(nn.Module):
         super().__init__()
 
         theta = torch.tensor([10000**(-2*i/d) for i in range(d//2)], device=device, dtype=dtype)
-        sin_tensor = torch.sin(torch.outer(torch.arange(m), theta), device=device, dtype=dtype) # m x d//2
-        cos_tensor = torch.cos(torch.outer(torch.arange(m), theta), device=device, dtype=dtype) # m x d//2
+        sin_tensor = torch.sin(torch.outer(torch.arange(m, device=device, dtype=dtype), theta)) # m x d//2
+        cos_tensor = torch.cos(torch.outer(torch.arange(m, device=device, dtype=dtype), theta)) # m x d//2
         
         self.register_buffer("sin_tensor", sin_tensor)
         self.register_buffer("cos_tensor", cos_tensor)

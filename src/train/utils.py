@@ -2,17 +2,35 @@ import torch.utils.data
 from src.preprocessing.dataloader import create_dataloader
 import os
 import matplotlib.pyplot as plt
+import numpy as np
+import tiktoken
+from typing import List
+
+def pretokenize(txt_file: List[str], token_path: str = "data/tokens"):
+    """
+    Tokenize and store training tokens for efficiency
+    """
+    data = []
+    for txt in txt_file:
+        with open(txt, 'r') as f:
+            data.append(f.read())
+    # tokenizer = BPETokenizer()
+    # token_ids = tokenizer.encode_iterable(data)
+    tokenizer = tiktoken.get_encoding("gpt2")
+    token_ids = []
+    for txt in data: #TODO: optimize this for large datasets
+        token_ids.extend(tokenizer.encode_ordinary(txt))#, allowed_special={"<|endoftext|>"}))
+    token_ids = np.array(token_ids) #Check
+    np.save(f"{token_path}/tokens.npy", token_ids)
+
 
 def load_data(args, mode="train") -> (torch.utils.data.DataLoader, torch.utils.data.DataLoader):
     if mode == "train":
-        train_paths = [os.path.join(args.train_path, f) for f in os.listdir(args.train_path)]
-        val_paths = [os.path.join(args.val_path, f) for f in os.listdir(args.val_path)]
-        train_dl = create_dataloader(train_paths, batch_size=args.batch_size, context_length=args.context_length, sample_size=args.sample_size)
-        val_dl = create_dataloader(val_paths, batch_size=args.batch_size, context_length=args.context_length, sample_size=args.sample_size//10)
+        train_dl = create_dataloader(args.train_path, batch_size=args.batch_size, context_length=args.context_length, sample_size=args.sample_size)
+        val_dl = create_dataloader(args.val_path, batch_size=args.batch_size, context_length=args.context_length, sample_size=args.sample_size//10)
         return train_dl, val_dl
     elif mode == "test":
-        test_paths = [os.path.join(args.test_path, f) for f in os.listdir(args.test_path)]
-        test_dl = create_dataloader(test_paths, batch_size=args.batch_size, context_length=args.context_length, sample_size=args.sample_size)
+        test_dl = create_dataloader(args.test_path, batch_size=args.batch_size, context_length=args.context_length, sample_size=args.sample_size)
         return test_dl
 
 def plot_losses(epochs_seen, loss: list[float], save_path:str):
