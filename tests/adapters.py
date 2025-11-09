@@ -21,6 +21,7 @@ from src.common.softmax import softmax
 from src.common.linear import Linear
 from src.common.embedding import Embedding
 
+
 def run_linear(
     d_in: int,
     d_out: int,
@@ -97,11 +98,12 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    
+
     swiglu = SwigluFeedForward(d_model, d_ff)
-    swiglu.load_state_dict({"W1.weight": w1_weight, "W2.weight": w2_weight, "W3.weight": w3_weight})
+    swiglu.load_state_dict(
+        {"W1.weight": w1_weight, "W2.weight": w2_weight, "W3.weight": w3_weight}
+    )
     return swiglu(in_features)
-    
 
 
 def run_scaled_dot_product_attention(
@@ -196,13 +198,16 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    gqa = GQA(max_seq_len, d_model, gka_ratio = 1, num_heads = num_heads)
-    gqa.load_state_dict({
-        "W_Q.weight": q_proj_weight,
-        "W_K.weight": k_proj_weight,
-        "W_V.weight": v_proj_weight,
-        "linear_output_layer.weight": o_proj_weight
-    }, strict=False)
+    gqa = GQA(max_seq_len, d_model, gka_ratio=1, num_heads=num_heads)
+    gqa.load_state_dict(
+        {
+            "W_Q.weight": q_proj_weight,
+            "W_K.weight": k_proj_weight,
+            "W_V.weight": v_proj_weight,
+            "linear_output_layer.weight": o_proj_weight,
+        },
+        strict=False,
+    )
     return gqa(in_features)
 
 
@@ -308,17 +313,19 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    transformer_block = TransformerBlock(d_model, max_seq_len, d_ff, gka_ratio = 1, num_heads = num_heads)
+    transformer_block = TransformerBlock(
+        d_model, max_seq_len, d_ff, gka_ratio=1, num_heads=num_heads
+    )
     params = {
-        "gqa.W_Q.weight" : weights["attn.q_proj.weight"],
-        "gqa.W_K.weight" : weights["attn.k_proj.weight"],
-        "gqa.W_V.weight" : weights["attn.v_proj.weight"],
-        "gqa.linear_output_layer.weight" : weights["attn.output_proj.weight"],
-        "ff.W1.weight" : weights["ffn.w1.weight"],
-        "ff.W2.weight" : weights["ffn.w2.weight"],
-        "ff.W3.weight" : weights["ffn.w3.weight"],
-        "rmsnorm_1.weight" : weights["ln1.weight"],
-        "rmsnorm_2.weight" : weights["ln2.weight"],
+        "gqa.W_Q.weight": weights["attn.q_proj.weight"],
+        "gqa.W_K.weight": weights["attn.k_proj.weight"],
+        "gqa.W_V.weight": weights["attn.v_proj.weight"],
+        "gqa.linear_output_layer.weight": weights["attn.output_proj.weight"],
+        "ff.W1.weight": weights["ffn.w1.weight"],
+        "ff.W2.weight": weights["ffn.w2.weight"],
+        "ff.W3.weight": weights["ffn.w3.weight"],
+        "rmsnorm_1.weight": weights["ln1.weight"],
+        "rmsnorm_2.weight": weights["ln2.weight"],
     }
     transformer_block.load_state_dict(params, strict=False)
     return transformer_block(in_features)
@@ -403,20 +410,30 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    transformer_lm = Transformer(vocab_size, num_layers, context_length, d_model, d_ff, gka_ratio=1, num_heads=num_heads)
+    transformer_lm = Transformer(
+        vocab_size,
+        num_layers,
+        context_length,
+        d_model,
+        d_ff,
+        gka_ratio=1,
+        num_heads=num_heads,
+    )
     params = {
-        "token_embedding.weight" : weights["token_embeddings.weight"],
-        "transformer_blocks.0.gqa.W_Q.weight" : weights["layers.0.attn.q_proj.weight"],
-        "transformer_blocks.0.gqa.W_K.weight" : weights["layers.0.attn.k_proj.weight"],
-        "transformer_blocks.0.gqa.W_V.weight" : weights["layers.0.attn.v_proj.weight"],
-        "transformer_blocks.0.linear_output_layer.weight" : weights["layers.0.attn.output_proj.weight"],
-        "transformer_blocks.0.ff.W1.weight" : weights["layers.0.ffn.w1.weight"],
-        "transformer_blocks.0.ff.W2.weight" : weights["layers.0.ffn.w2.weight"],
-        "transformer_blocks.0.ff.W3.weight" : weights["layers.0.ffn.w3.weight"],
-        "transformer_blocks.0.rmsnorm_1.weight" : weights["layers.0.ln1.weight"],
-        "transformer_blocks.0.rmsnorm_2.weight" : weights["layers.0.ln2.weight"],
-        "rmsnorm.weight" : weights["ln_final.weight"],
-        "output_layer.weight" : weights["lm_head.weight"],
+        "token_embedding.weight": weights["token_embeddings.weight"],
+        "transformer_blocks.0.gqa.W_Q.weight": weights["layers.0.attn.q_proj.weight"],
+        "transformer_blocks.0.gqa.W_K.weight": weights["layers.0.attn.k_proj.weight"],
+        "transformer_blocks.0.gqa.W_V.weight": weights["layers.0.attn.v_proj.weight"],
+        "transformer_blocks.0.linear_output_layer.weight": weights[
+            "layers.0.attn.output_proj.weight"
+        ],
+        "transformer_blocks.0.ff.W1.weight": weights["layers.0.ffn.w1.weight"],
+        "transformer_blocks.0.ff.W2.weight": weights["layers.0.ffn.w2.weight"],
+        "transformer_blocks.0.ff.W3.weight": weights["layers.0.ffn.w3.weight"],
+        "transformer_blocks.0.rmsnorm_1.weight": weights["layers.0.ln1.weight"],
+        "transformer_blocks.0.rmsnorm_2.weight": weights["layers.0.ln2.weight"],
+        "rmsnorm.weight": weights["ln_final.weight"],
+        "output_layer.weight": weights["lm_head.weight"],
     }
     transformer_lm.load_state_dict(params, strict=False)
     return transformer_lm(in_indices)
@@ -518,7 +535,9 @@ def run_cross_entropy(
     return compute_cross_entropy(inputs, targets)
 
 
-def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float) -> None:
+def run_gradient_clipping(
+    parameters: Iterable[torch.nn.Parameter], max_l2_norm: float
+) -> None:
     """Given a set of parameters, clip their combined gradients to have l2 norm at most max_l2_norm.
 
     Args:
@@ -562,7 +581,9 @@ def run_get_lr_cosine_schedule(
     Returns:
         Learning rate at the given iteration under the specified schedule.
     """
-    return cosine_annealing_lr_scheduler(it, max_learning_rate, min_learning_rate, warmup_iters, cosine_cycle_iters)
+    return cosine_annealing_lr_scheduler(
+        it, max_learning_rate, min_learning_rate, warmup_iters, cosine_cycle_iters
+    )
 
 
 def run_save_checkpoint(

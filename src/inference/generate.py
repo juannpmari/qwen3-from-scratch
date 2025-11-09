@@ -3,6 +3,7 @@ import torch
 from torch import nn
 from src.preprocessing.tokenizer import BPETokenizer
 
+
 def _sample(probs: torch.Tensor, top_p: float) -> torch.Tensor:
     """
     Perform top-p (nucleus) sampling from a probability distribution.
@@ -14,7 +15,7 @@ def _sample(probs: torch.Tensor, top_p: float) -> torch.Tensor:
     Returns:
         torch.Tensor: sampled token IDs, same batch size as input (or scalar if 1D)
     """
-    probs = probs[:,-1,:]
+    probs = probs[:, -1, :]
     if probs.dim() not in (1, 2):
         raise RuntimeError("probs must be 1 or 2 dim")
 
@@ -62,11 +63,20 @@ def _sample(probs: torch.Tensor, top_p: float) -> torch.Tensor:
         return sampled_tokens.squeeze(0)  # return scalar tensor
     return sampled_tokens  # (batch_size,)
 
-def generate_text(model:nn.Module, tokenizer:BPETokenizer, prompt: str, max_tokens: int, temperature: float, top_p: float, device: torch.device):
+
+def generate_text(
+    model: nn.Module,
+    tokenizer: BPETokenizer,
+    prompt: str,
+    max_tokens: int,
+    temperature: float,
+    top_p: float,
+    device: torch.device,
+):
     generated_tokens = 0
     end_of_sequence = False
     token_ids = tokenizer.encode(prompt)
-        
+
     token_ids = torch.tensor(token_ids).unsqueeze(0).to(device)
     while generated_tokens < max_tokens and not end_of_sequence:
         logits = model(token_ids)
@@ -78,8 +88,6 @@ def generate_text(model:nn.Module, tokenizer:BPETokenizer, prompt: str, max_toke
         token_ids = torch.cat([token_ids, token_id], dim=1)
         # token_ids = torch.cat([token_ids, token_id.unsqueeze(0)], dim=-1)
 
-
-    response = ''.join([char for char in tokenizer.decode(token_ids[0].tolist())])
+    response = "".join([char for char in tokenizer.decode(token_ids[0].tolist())])
 
     return response
-        

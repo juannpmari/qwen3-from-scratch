@@ -62,7 +62,9 @@ class NumpySnapshot:
         if self.always_match_exact:
             rtol = atol = 0
         if test_name is DEFAULT:
-            assert self.default_test_name is not None, "Test name must be provided or set as default"
+            assert (
+                self.default_test_name is not None
+            ), "Test name must be provided or set as default"
             test_name = self.default_test_name
 
         snapshot_path = self._get_snapshot_path(test_name)
@@ -77,12 +79,16 @@ class NumpySnapshot:
         # Verify all expected arrays are present
         missing_keys = set(arrays_dict.keys()) - set(expected_arrays.keys())
         if missing_keys:
-            raise AssertionError(f"Keys {missing_keys} not found in snapshot for {test_name}")
+            raise AssertionError(
+                f"Keys {missing_keys} not found in snapshot for {test_name}"
+            )
 
         # Verify all actual arrays are expected
         extra_keys = set(expected_arrays.keys()) - set(arrays_dict.keys())
         if extra_keys:
-            raise AssertionError(f"Snapshot contains extra keys {extra_keys} for {test_name}")
+            raise AssertionError(
+                f"Snapshot contains extra keys {extra_keys} for {test_name}"
+            )
 
         # Compare all arrays
         for key in arrays_dict:
@@ -130,7 +136,9 @@ class Snapshot:
         if force_update is DEFAULT:
             force_update = self.default_force_update
         if test_name is DEFAULT:
-            assert self.default_test_name is not None, "Test name must be provided or set as default"
+            assert (
+                self.default_test_name is not None
+            ), "Test name must be provided or set as default"
             test_name = self.default_test_name
 
         snapshot_path = self._get_snapshot_path(test_name)
@@ -142,12 +150,16 @@ class Snapshot:
         if isinstance(actual, dict):
             for key in actual:
                 if key not in expected_data:
-                    raise AssertionError(f"Key '{key}' not found in snapshot for {test_name}")
-                assert actual[key] == expected_data[key], (
-                    f"Data for key '{key}' does not match snapshot for {test_name}"
-                )
+                    raise AssertionError(
+                        f"Key '{key}' not found in snapshot for {test_name}"
+                    )
+                assert (
+                    actual[key] == expected_data[key]
+                ), f"Data for key '{key}' does not match snapshot for {test_name}"
         else:
-            assert actual == expected_data, f"Data does not match snapshot for {test_name}"
+            assert (
+                actual == expected_data
+            ), f"Data does not match snapshot for {test_name}"
 
 
 @pytest.fixture
@@ -163,7 +175,9 @@ def snapshot(request):
     force_update = False
 
     # Create the snapshot handler with default settings
-    snapshot_handler = Snapshot(default_force_update=force_update, default_test_name=request.node.name)
+    snapshot_handler = Snapshot(
+        default_force_update=force_update, default_test_name=request.node.name
+    )
 
     return snapshot_handler
 
@@ -185,7 +199,9 @@ def numpy_snapshot(request):
 
     # Create the snapshot handler with default settings
     snapshot = NumpySnapshot(
-        default_force_update=force_update, always_match_exact=match_exact, default_test_name=request.node.name
+        default_force_update=force_update,
+        always_match_exact=match_exact,
+        default_test_name=request.node.name,
     )
 
     return snapshot

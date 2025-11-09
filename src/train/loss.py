@@ -1,33 +1,43 @@
 import torch
 
+
 def compute_cross_entropy(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
     """
-    logits: (batch_size, vocab_size)
-    targets: (batch_size,) IDs of the target tokens
+    Compute cross entropy loss between an input sequence and its target next token.
+
+    Args:
+        logits: (batch_size, vocab_size)
+        targets: (batch_size,) IDs of the target tokens
 
     Returns:
-        ce: scalar; avg cross entropy for the sequences in the batch
+        ce: scalar; avg cross entropy for the sequence
     """
     ce = torch.zeros(logits.shape[0])
-    for b in range(logits.shape[0]): #iterate over batch
-        sequence = logits[b] #vocab_size
+    for b in range(logits.shape[0]):  # iterate over batch
+        sequence = logits[b]  # vocab_size
         sequence_log_prob = torch.log_softmax(sequence, dim=0)
         target_log_prob = sequence_log_prob[targets[b]]
         ce[b] = -target_log_prob
-    return ce.mean()  #scalar
+    return ce.mean()  # scalar
 
-#uv run pytest -k test_cross_entropy
 
-def compute_cross_entropy_batch(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+# uv run pytest -k test_cross_entropy
+
+
+def compute_cross_entropy_batch(
+    logits: torch.Tensor, targets: torch.Tensor
+) -> torch.Tensor:
     """
-    logits: (batch_size, vocab_size)
-    targets: (batch_size,) IDs of the target tokens
+    Compute cross entropy loss for a batch of sequences.
+
+    Args:
+        logits: (batch_size, context_length, vocab_size)
+        targets: (batch_size, context_length) IDs of the target tokens
 
     Returns:
-        ce: scalar; avg cross entropy for the sequences in the batch
+        ce: scalar; avg cross entropy for the batch
     """
     ce = 0
     for token_idx in range(logits.shape[1]):
-        ce += compute_cross_entropy(logits[:, token_idx,:], targets[:, token_idx])
+        ce += compute_cross_entropy(logits[:, token_idx, :], targets[:, token_idx])
     return ce / logits.shape[1]
-    

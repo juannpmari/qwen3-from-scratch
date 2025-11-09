@@ -23,20 +23,31 @@ DTYPE_MAP = {
     "bf16": torch.bfloat16,
 }
 
+
 def train_model(args):
     print("training model...")
     train_dl, val_dl = load_data(args, mode="train")
-    model = Transformer(vocab_size=args.vocab_size, num_layers=args.num_layers, context_length=args.context_length, hidden_dim=args.d_model, dff = args.dff, gka_ratio=args.gka_ratio, num_heads=args.num_heads)
+    model = Transformer(
+        vocab_size=args.vocab_size,
+        num_layers=args.num_layers,
+        context_length=args.context_length,
+        hidden_dim=args.d_model,
+        dff=args.dff,
+        gka_ratio=args.gka_ratio,
+        num_heads=args.num_heads,
+    )
     device = args.device
     dtype = DTYPE_MAP.get(args.dtype, torch.float32)
-    model.to(device = device, dtype = dtype)
+    model.to(device=device, dtype=dtype)
     model.train()
     optimizer = AdamW(model.parameters(), lr=args.learning_rate)
-    
+
     timer = time.time()
-    train_loss, val_loss, tokens_seen, global_steps, checkpoint_dir = train(model, optimizer, args, train_dl, val_dl, device)
+    train_loss, val_loss, tokens_seen, global_steps, checkpoint_dir = train(
+        model, optimizer, args, train_dl, val_dl, device
+    )
     timer = time.time() - timer
-    
+
     with open(f"{checkpoint_dir}/config.yaml", "w") as f:
         yaml.dump(args, f)
 
@@ -54,18 +65,27 @@ def train_model(args):
     plot_losses(range(global_steps), train_loss, f"{checkpoint_dir}/train_loss.png")
     # plot_losses(range(global_steps), val_loss, f"{checkpoint_dir}/val_loss.png")
 
+
 def generate(args):
     print("Generating text...")
     # test_dl = load_data(args, mode="test")
-    model = Transformer(vocab_size=args.vocab_size, num_layers=args.num_layers, context_length=args.context_length, hidden_dim=args.d_model, dff = args.dff, gka_ratio=args.gka_ratio, num_heads=args.num_heads)
+    model = Transformer(
+        vocab_size=args.vocab_size,
+        num_layers=args.num_layers,
+        context_length=args.context_length,
+        hidden_dim=args.d_model,
+        dff=args.dff,
+        gka_ratio=args.gka_ratio,
+        num_heads=args.num_heads,
+    )
     optimizer = AdamW(model.parameters(), lr=args.learning_rate)
     src = args.weights_dir
     iteration = load_checkpoint(src, model, optimizer)
     device = args.device
     dtype = DTYPE_MAP.get(args.dtype, torch.float32)
-    model.to(device = device, dtype = dtype)
+    model.to(device=device, dtype=dtype)
     model.eval()
-    
+
     prompt = """I HAD always thought Jack Gisburn rather a cheap genius--though a good fellow enough--so it was no great surprise to me to hear that, in the height of his glory, he had dropped his painting, married a rich widow, and established himself in a villa on the Riviera. (Though I rather thought it would have been Rome or Florence.)
 
     "The height of his glory"--"""
@@ -74,20 +94,23 @@ def generate(args):
     max_tokens = args.max_tokens
     temperature = args.temperature
     top_p = args.top_p
-    
-    generated_text = generate_text(model, tokenizer, prompt, max_tokens, temperature, top_p, device)
+
+    generated_text = generate_text(
+        model, tokenizer, prompt, max_tokens, temperature, top_p, device
+    )
     print("Generated text:", generated_text)
+
 
 if __name__ == "__main__":
     # parser = argparse.ArgumentParser(description="Qwen3 Training Script")
     # parser.add_argument("--config", type=str, default="experiments/base_config.yaml", help="Path to the configuration file")
     # args = parser.parse_args()
-    
+
     # Load configuration from YAML file
     with open("experiments/base_train.yaml", "r") as f:
-    # with open("experiments/base_inf.yaml", "r") as f:
+        # with open("experiments/base_inf.yaml", "r") as f:
         config = yaml.safe_load(f)
-    
+
     # Flatten the nested config structure into a single namespace
     if config["mode"] == "train":
         args = Namespace(
@@ -109,7 +132,7 @@ if __name__ == "__main__":
             checkpoint_interval=config["training"]["checkpoint_interval"],
             sample_size=config["training"]["sample_size"],
             device=config["device"],
-            dtype=config["training"]["dtype"]
+            dtype=config["training"]["dtype"],
         )
     elif config["mode"] == "inference":
         args = Namespace(
@@ -128,11 +151,11 @@ if __name__ == "__main__":
             learning_rate=config["inference"]["learning_rate"],
             sample_size=config["inference"]["sample_size"],
             device=config["device"],
-            dtype=config["dtype"]
+            dtype=config["dtype"],
         )
 
     if args.mode == "train":
-         train_model(args)
- 
+        train_model(args)
+
     elif args.mode == "inference":
         generate(args)
