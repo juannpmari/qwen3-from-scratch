@@ -29,28 +29,8 @@ The project contains an implementation of the following components:
 
 ## 🏗️ LLM Architecture Overview
 
-The Qwen3 model implements a decoder-only transformer architecture with several modern improvements:
+The Qwen3 model implements a decoder-only transformer architecture with several modern improvements. For a detailed anaylsis of the architecture, see the [architecture.md](resources/architecture.md) file.
 
-### Key Components
-
-1. **Grouped Query Attention (GQA)**
-   - Reduces memory and compute requirements compared to standard multi-head attention
-   - Shares key-value heads across multiple query heads (configurable GQA ratio)
-   - Implements causal masking for autoregressive generation
-
-2. **Rotary Position Embeddings (RoPE)**
-   - Encodes positional information directly into query and key matrices
-   - Provides better extrapolation to longer sequences
-   - Uses rotation matrices based on position indices
-
-3. **RMSNorm**
-   - Simpler and faster alternative to LayerNorm
-   - Normalizes using root mean square without mean centering
-   - Applied to queries and keys before attention computation
-
-4. **SwiGLU Feed-Forward Network** (In Progress)
-   - Gated linear unit with Swish activation
-   - Provides better performance than standard FFN architectures
 
 
 ## 📋 Development Roadmap

@@ -1,5 +1,0 @@
-# Resource Accounting
-
-## FLOPs
-
-## Memory
