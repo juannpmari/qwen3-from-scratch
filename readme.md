@@ -1,6 +1,6 @@
 # Qwen3 From Scratch
 
-A comprehensive implementation of the Qwen3 transformer architecture built from the ground up using PyTorch. This project aims to provide a deep understanding of modern large language model architectures by implementing each component from scratch.
+A comprehensive implementation of the Qwen3 transformer architecture built from the ground up using PyTorch. This project aims to provide a deep understanding of modern large language model architectures and training/inference techniques by implementing each component from scratch.
 
 ## 🎯 Project Objectives
 
@@ -16,7 +16,7 @@ This project is designed to:
 
 ## 🏗️ Architecture Overview
 
-The Qwen3 model implements a decoder-only transformer architecture with several modern improvements:
+The Qwen3[https://arxiv.org/pdf/2505.09388] model implements a decoder-only transformer architecture with several modern improvements:
 
 ### Key Components
 
@@ -63,10 +63,7 @@ qwen3-from-scratch/
 - **NumPy**: Numerical computations (implicit via PyTorch)
 
 ### Core PyTorch Components
-- `torch.nn.Module`: Base class for all neural network modules
-- `torch.nn.Linear`: Linear transformation layers
-- `torch.nn.functional`: Functional API for operations like softmax
-- Custom implementations of attention mechanisms and normalization
+All the implementations are based on `torch.nn.Module`: Base class for all neural network modules
 
 ## 🚀 Current Implementation Status
 
@@ -75,15 +72,13 @@ qwen3-from-scratch/
 - [x] Rotary Position Embeddings (RoPE)
 - [x] RMSNorm normalization
 - [x] Causal masking for autoregressive generation
-- [x] Project structure and organization
+- [x] SwiGLU Feed-Forward Network
+- [x] Complete Transformer Block
+- [x] Training loop
 
 ### 🔄 In Progress
-- [ ] SwiGLU Feed-Forward Network
-- [ ] Complete Transformer Block
-- [ ] Tokenizer implementation
-- [ ] Full model assembly
-- [ ] Training loop
-- [ ] Model checkpointing
+- [ ] BPETokenizer implementation
+- [ ] Optimization: Flash Attention with Triton
 
 ## 🔍 Key Implementation Details
 
