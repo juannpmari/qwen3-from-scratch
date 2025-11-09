@@ -1,7 +1,6 @@
 test.ipynb
 TODO
 *.pdf
-*.png
 *.pt
 __pycache__
 uv.lock

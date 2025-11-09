@@ -40,7 +40,9 @@ Forward + Backward pass (Mean step time for 10 steps)
 Insights:
 - MPS is faster than CPU
 - Times are higher with no warmup steps, but they are misrepresentative
-- 
+
+Plot time taken vs warmup steps (Forward pass):
+![wall-clock-time vs warmup steps](resources/time_vs_w_1.png)
 
 ### GPU Utilization
 
