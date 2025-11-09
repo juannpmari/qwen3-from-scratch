@@ -11,15 +11,15 @@ class Linear(nn.Module):
         self,
         in_features: int,
         out_features: int,
-        device: torch.device | None = None,
-        dtype: torch.dtype | None = None,
+        device: torch.device  = None,
+        dtype: torch.dtype  = None,
     ):
         """
         Args:
             in_features (int): number of input features
             out_features (int): number of output features
-            device (torch.device | None, optional): device to run on. Defaults to None.
-            dtype (torch.dtype | None, optional): data type to run on. Defaults to None.
+            device (torch.device , optional): device to run on. Defaults to None.
+            dtype (torch.dtype , optional): data type to run on. Defaults to None.
         """
         super().__init__()
         self.in_features = in_features

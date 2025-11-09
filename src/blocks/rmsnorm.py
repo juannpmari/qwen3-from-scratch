@@ -11,15 +11,15 @@ class RMSNorm(nn.Module):
         self,
         head_dim: int,
         eps: float = 1e-5,
-        device: torch.device | None = None,
-        dtype: torch.dtype | None = None,
+        device: torch.device  = None,
+        dtype: torch.dtype  = None,
     ):
         """
         Args:
             head_dim (int): head dimension
             eps (float, optional): epsilon value. Defaults to 1e-5.
-            device (torch.device | None, optional): device to run on. Defaults to None.
-            dtype (torch.dtype | None, optional): data type to run on. Defaults to None.
+            device (torch.device , optional): device to run on. Defaults to None.
+            dtype (torch.dtype , optional): data type to run on. Defaults to None.
         """
         super().__init__()
         self.epsilon = eps

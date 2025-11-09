@@ -8,12 +8,12 @@ class SwigluFeedForward(nn.Module):
     SwiGLU feed forward layer
     """
 
-    def __init__(self, hidden_dim: int, dff: int, device: torch.device | None = None):
+    def __init__(self, hidden_dim: int, dff: int, device: torch.device  = None):
         """
         Args:
             hidden_dim (int): hidden dimension
             dff (int): dimension of the feed forward layer
-            device (torch.device | None, optional): device to run on. Defaults to None.
+            device (torch.device , optional): device to run on. Defaults to None.
         """
         super().__init__()
         self.W1 = Linear(hidden_dim, dff, device=device)

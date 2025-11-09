@@ -44,12 +44,12 @@ class GQA(nn.Module):
         )
 
     def forward(
-        self, x: torch.tensor, token_positions: torch.tensor | None = None
+        self, x: torch.tensor, token_positions: torch.tensor = None
     ) -> torch.tensor:
         """
         Args:
             x (torch.tensor): inputs of shape (batch_size, context_length, hidden_dim)
-            token_positions (torch.tensor | None, optional): optional tensor with the positions of the tokens. Defaults to None.
+            token_positions (torch.tensor , optional): optional tensor with the positions of the tokens. Defaults to None.
         Returns:
             torch.tensor: output tensor of shape (batch_size, context_length, hidden_dim)
         """

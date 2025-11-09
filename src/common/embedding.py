@@ -8,13 +8,13 @@ class Embedding(nn.Module):
     """
 
     def __init__(
-        self, vocab_size: int, d_model: int, device: torch.device | None = None
+        self, vocab_size: int, d_model: int, device: torch.device  = None
     ):
         """
         Args:
             vocab_size (int): vocabulary size
             d_model (int): hidden dimension
-            device (torch.device | None, optional): device to run on. Defaults to None.
+            device (torch.device , optional): device to run on. Defaults to None.
         """
         super().__init__()
         self.weight = nn.Parameter(torch.empty(vocab_size, d_model, device=device))

@@ -14,8 +14,8 @@ class RoPE(nn.Module):
         Args:
             d (int): head_dim
             m (int): context_length
-            device (torch.device | None, optional): device to run on. Defaults to None.
-            dtype (torch.dtype | None, optional): data type to run on. Defaults to None.
+            device (torch.device , optional): device to run on. Defaults to None.
+            dtype (torch.dtype , optional): data type to run on. Defaults to None.
         """
         super().__init__()
 

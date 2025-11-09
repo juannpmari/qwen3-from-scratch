@@ -31,8 +31,6 @@ The project contains an implementation of the following components:
 
 The Qwen3 model implements a decoder-only transformer architecture with several modern improvements. For a detailed anaylsis of the architecture, see the [architecture.md](resources/architecture.md) file.
 
-
-
 ## 📋 Development Roadmap
 
 ### First Stage: Core Implementation
