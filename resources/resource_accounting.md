@@ -42,7 +42,7 @@ Insights:
 - Times are higher with no warmup steps, but they are misrepresentative
 
 Plot time taken vs warmup steps (Forward pass):
-![wall-clock-time vs warmup steps](resources/time_vs_w_1.png)
+![wall-clock-time vs warmup steps](time_vs_w_1.png)
 
 ### GPU Utilization
 
