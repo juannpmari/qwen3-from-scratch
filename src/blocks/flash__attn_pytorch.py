@@ -54,13 +54,6 @@ class FlashAttention2Pytorch(torch.autograd.Function):
             L[i * bq:(i + 1) * bq, :] = Li  # Store back to HBM
         return O, L
 
-
-
-
-
-
-    
-
     @staticmethod
     def backward(ctx, grad_output):
         raise NotImplementedError("Backward pass is not implemented yet.")

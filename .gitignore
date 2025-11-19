@@ -3,7 +3,6 @@ TODO
 *.pdf
 *.pt
 __pycache__
-uv.lock
 checkpoints
 */data
 data/**
