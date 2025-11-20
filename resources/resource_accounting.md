@@ -5,9 +5,9 @@ Analysis of the resources used by the model.
 
 ## Memory
 
-## Benchmarking
+# Benchmarking
 
-### Wall-clock time - Naive Implementation
+### Compute (Wall-clock time) - Naive Implementation
 
 Forward pass (Mean step time for 10 steps)
 | Parameter | CPU | MPS | MPS | MPS |
@@ -44,9 +44,8 @@ Insights:
 Plot time taken vs warmup steps (Forward pass):
 ![wall-clock-time vs warmup steps](time_vs_w_1.png)
 
-### GPU Utilization
 
-### GPU Memory Utilization
+# Profiling (Compute)
 
-## Profiling
+# Profiling (Memory)
 
