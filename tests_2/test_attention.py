@@ -42,7 +42,7 @@ def _make_attn_inputs(device=None):
 
 def _test_flash_forward_pass(impl, device="cpu", is_causal=False):
     q, k, v, _do = _make_attn_inputs(device)
-    o = impl(q, k, v, is_causal)
+    o,_ = impl(q, k, v, is_causal)
 
     # Extract L from the saved tensors
     assert o.grad_fn.saved_tensors is not None, "No saved tensors found in the output tensor. Make sure your autograd forward is saving them using ctx.save_for_backward."

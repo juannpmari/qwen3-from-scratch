@@ -36,37 +36,24 @@ class FlashAttention2Pytorch(torch.autograd.Function):
                 Kj = k_tiles[j] # (batch_size, bk, d)
                 Vj = v_tiles[j] # (batch_size, bk, d)
                 
-                 # Sij: (batch_size, bq, bk)
-                Sij = Qi @ Kj.transpose(-2, -1) / (d ** 0.5)
+                Sij = Qi @ Kj.transpose(-2, -1) / (d ** 0.5) # Sij: (batch_size, bq, bk)
 
-                # mi_new: (batch_size, bq, 1)
-                mi_new = torch.max(mi, torch.max(Sij, dim=-1, keepdim=True).values)
-                
-                # mi_scale: exp(mi - mi_new)
+                mi_new = torch.max(mi, torch.max(Sij, dim=-1, keepdim=True).values) # mi_new: (batch_size, bq, 1)
                 mi_scale = torch.exp(mi - mi_new)
-                
-                # Pij: Scaled attention scores for the current tile (batch_size, bq, bk)
-                Pij = torch.exp(Sij - mi_new)
-
-                # li_new: exp(mi - mi_new) * li_prev + sum(Pij, dim=-1, keepdim=True)
+                Pij = torch.exp(Sij - mi_new) # (batch_size, bq, bk)
                 li_new = mi_scale * li + torch.sum(Pij, dim=-1, keepdim=True) 
-
-                # Oi_new: (exp(mi - mi_new) * Oi_prev) + (Pij @ Vj)
                 Oi_new = mi_scale * Oi_new + Pij @ Vj
-                
+               
                 mi = mi_new
                 li = li_new
                 
-     
-            # Li: mi + log(li) => (batch_size, bq, 1)
-            Li = mi + torch.log(li)
-            
-            # Oi: Oi_new / li => (batch_size, bq, d) (Broadcasting division)
+            Li = mi + torch.log(li) # (batch_size, bq, 1)
             Oi_final = Oi_new / li
 
             O[:, i * bq:(i + 1) * bq, :] = Oi_final  # (batch_size, bq, d)
             L[:, i * bq:(i + 1) * bq, :] = Li      # (batch_size, bq, 1)
 
+        ctx.save_for_backward(Q, K, V, O, L.squeeze(-1))
         return O, L
 
     @staticmethod
