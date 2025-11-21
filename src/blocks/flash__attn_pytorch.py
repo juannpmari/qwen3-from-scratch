@@ -5,23 +5,25 @@ class FlashAttention2Pytorch(torch.autograd.Function):
     @staticmethod
     def forward(ctx, Q, K, V, is_causal = False):
         """
-        Q of shape (batch_size, seq_len, dim)
-        K of shape ()
-        V of shape 
+        Q of shape (seq_len, dim)
+        K of shape (seq_len, dim)
+        V of shape (seq_len, dim)
         """
         bq = 16 # tile size for Q
         bk = 16 # tile size for K, V
 
-        d = Q.size(-1)
-        Tq = Q.size(-2)/bq
-        Tk = K.size(-2)/bk
+        Nq = Q.size(0)
+        Nk = K.size(0)
+        d = Q.size(1)
+        Tq = Nq//bq
+        Tk = Nk//bk
         # ctx.save_for_backward(Q, K, V, O, L)  # Save tensors for backward pass if needed
 
         O = torch.zeros_like(Q)  # Output tensor
-        L = torch.zeros(Q.size(0), 1)  # Log-sum-exp tensor
+        L = torch.zeros(d, 1)  # Log-sum-exp tensor
 
         #Split Q
-        q_tiles = torch.split(Q, Tq, dim=0) # List of Q tiles, each one bq x d #TODO: check border conditions
+        q_tiles = torch.split(Q, Tq, dim=0) # List of Q tiles, each one bq x d
         
         # Split K, V
         k_tiles = torch.split(K, Tk, dim=0) # List of K tiles, each one bk x d
@@ -29,27 +31,26 @@ class FlashAttention2Pytorch(torch.autograd.Function):
 
         for i in range(0,Tq):
             Qi = q_tiles[i] # Load from HBM to SRAM
-            Oi = torch.zeros(bq, d)
-            li = torch.zeros(bq, 1)
-            mi = torch.full((bq, 1), float('-inf'))
+            Oi = [torch.zeros_like(Qi)]
+            li = [torch.zeros(bq, 1)]
+            mi = [torch.full((bq, 1), float('-inf'))]
 
-            for j in range(0,Tk):
-                Kj = k_tiles[j] # Load from HBM to SRAM
-                Vj = v_tiles[j] # Load from HBM to SRAM
+            for j in range(1,Tk+1):      
+                Kj = k_tiles[j-1] # Load from HBM to SRAM
+                Vj = v_tiles[j-1] # Load from HBM to SRAM
 
                 Sij = Qi @ Kj.transpose(-2, -1) / (d ** 0.5)  # bq x bk
-                if j > 0:
-                    mi[j] = torch.max(mi[j-1], torch.max(Sij, dim=-1, keepdim=True).values)  # bq x 1
-                else:
-                    mi[j] = torch.max(Sij, dim=-1, keepdim=True).values  # bq x 1
+                mi.append(torch.max(mi[j-1], torch.max(Sij, dim=-1, keepdim=True).values))  # bq x 1
                 
                 Pij = torch.exp(Sij - mi[j])  # bq x bk
 
-                lij = torch.exp(mi[j-1] - mi[j]) * li[j-1] + torch.sum(Pij, dim=-1, keepdim=True)
-                Oij = None # TBD  # bq x d
+                li.append(torch.exp(mi[j-1] - mi[j]) * li[j-1] + torch.sum(Pij, dim=-1, keepdim=True)) #b1x1
+                
+                # why diag?    
+                Oi.append(torch.diag((torch.exp(mi[j-1] - mi[j]))) * Oi[j-1]  + Pij @ Vj) # bq x d
 
-            Oi = None # TBD
-            Li = None # TBD
+            Oi = Oi[Tk] / torch.diag(li[Tk]) # bq x d # why diag?
+            Li = mi[Tk] + torch.log(li[Tk])
             O[i * bq:(i + 1) * bq, :] = Oi  # Store back to HBM
             L[i * bq:(i + 1) * bq, :] = Li  # Store back to HBM
         return O, L
