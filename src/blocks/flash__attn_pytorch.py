@@ -3,56 +3,70 @@ import torch
 
 class FlashAttention2Pytorch(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, Q, K, V, is_causal = False):
+    def forward(ctx, Q, K, V, is_causal=False):
         """
-        Q of shape (seq_len, dim)
-        K of shape (seq_len, dim)
-        V of shape (seq_len, dim)
+        Q of shape (batch_size, seq_len_q, dim)
+        K of shape (batch_size, seq_len_k, dim)
+        V of shape (batch_size, seq_len_k, dim)
         """
-        bq = 16 # tile size for Q
-        bk = 16 # tile size for K, V
+       
+        bq = 16 
+        bk = 16 
 
-        Nq = Q.size(0)
-        Nk = K.size(0)
-        d = Q.size(1)
-        Tq = Nq//bq
-        Tk = Nk//bk
-        # ctx.save_for_backward(Q, K, V, O, L)  # Save tensors for backward pass if needed
-
-        O = torch.zeros_like(Q)  # Output tensor
-        L = torch.zeros(d, 1)  # Log-sum-exp tensor
-
-        #Split Q
-        q_tiles = torch.split(Q, Tq, dim=0) # List of Q tiles, each one bq x d
+        batch_size = Q.size(0)
+        Nq = Q.size(1)
+        Nk = K.size(1)
+        d = Q.size(2)
         
-        # Split K, V
-        k_tiles = torch.split(K, Tk, dim=0) # List of K tiles, each one bk x d
-        v_tiles = torch.split(V, Tk, dim=0) # List of V tiles, each one bk x d
+        Tq = Nq // bq
+        Tk = Nk // bk
 
-        for i in range(0,Tq):
-            Qi = q_tiles[i] # Load from HBM to SRAM
-            Oi = [torch.zeros_like(Qi)]
-            li = [torch.zeros(bq, 1)]
-            mi = [torch.full((bq, 1), float('-inf'))]
+        O = torch.zeros_like(Q)
+        L = torch.zeros(batch_size, Nq, 1)
+        k_tiles = torch.split(K, bk, dim=1)
+        v_tiles = torch.split(V, bk, dim=1)
 
-            for j in range(1,Tk+1):      
-                Kj = k_tiles[j-1] # Load from HBM to SRAM
-                Vj = v_tiles[j-1] # Load from HBM to SRAM
-
-                Sij = Qi @ Kj.transpose(-2, -1) / (d ** 0.5)  # bq x bk
-                mi.append(torch.max(mi[j-1], torch.max(Sij, dim=-1, keepdim=True).values))  # bq x 1
+        for i in range(Tq):
+            Qi = Q[:, i * bq:(i + 1) * bq, :] 
+            Oi_new = torch.zeros_like(Qi)
+            li = torch.zeros(batch_size, bq, 1, device=Q.device)
+            mi = torch.full((batch_size, bq, 1), float('-inf'), device=Q.device)
+            
+            for j in range(Tk):      
+                Kj = k_tiles[j] # (batch_size, bk, d)
+                Vj = v_tiles[j] # (batch_size, bk, d)
                 
-                Pij = torch.exp(Sij - mi[j])  # bq x bk
+                 # Sij: (batch_size, bq, bk)
+                Sij = Qi @ Kj.transpose(-2, -1) / (d ** 0.5)
 
-                li.append(torch.exp(mi[j-1] - mi[j]) * li[j-1] + torch.sum(Pij, dim=-1, keepdim=True)) #b1x1
+                # mi_new: (batch_size, bq, 1)
+                mi_new = torch.max(mi, torch.max(Sij, dim=-1, keepdim=True).values)
                 
-                # why diag?    
-                Oi.append(torch.diag((torch.exp(mi[j-1] - mi[j]))) * Oi[j-1]  + Pij @ Vj) # bq x d
+                # mi_scale: exp(mi - mi_new)
+                mi_scale = torch.exp(mi - mi_new)
+                
+                # Pij: Scaled attention scores for the current tile (batch_size, bq, bk)
+                Pij = torch.exp(Sij - mi_new)
 
-            Oi = Oi[Tk] / torch.diag(li[Tk]) # bq x d # why diag?
-            Li = mi[Tk] + torch.log(li[Tk])
-            O[i * bq:(i + 1) * bq, :] = Oi  # Store back to HBM
-            L[i * bq:(i + 1) * bq, :] = Li  # Store back to HBM
+                # li_new: exp(mi - mi_new) * li_prev + sum(Pij, dim=-1, keepdim=True)
+                li_new = mi_scale * li + torch.sum(Pij, dim=-1, keepdim=True) 
+
+                # Oi_new: (exp(mi - mi_new) * Oi_prev) + (Pij @ Vj)
+                Oi_new = mi_scale * Oi_new + Pij @ Vj
+                
+                mi = mi_new
+                li = li_new
+                
+     
+            # Li: mi + log(li) => (batch_size, bq, 1)
+            Li = mi + torch.log(li)
+            
+            # Oi: Oi_new / li => (batch_size, bq, d) (Broadcasting division)
+            Oi_final = Oi_new / li
+
+            O[:, i * bq:(i + 1) * bq, :] = Oi_final  # (batch_size, bq, d)
+            L[:, i * bq:(i + 1) * bq, :] = Li      # (batch_size, bq, 1)
+
         return O, L
 
     @staticmethod
