@@ -104,16 +104,20 @@ def flash_fwd_kernel(
         Pij = tl.exp(Sij - mi_new)  # Q_tile_size x K_tile_size
         
         li_new = mi_scale * li + tl.sum(Pij, 1)[:, None]
-        Oi_new = mi_scale * Oi_new + tl.dot(Pij , Vj)
+        Oi_new = mi_scale * Oi_new + tl.dot(Pij.to(dtype=Vj.dtype) , Vj)
 
         mi = mi_new
         li = li_new
 
-        K_block_ptr.advance( ( K_TILE_SIZE, 0) )
-        V_block_ptr.advance( ( K_TILE_SIZE, 0) )
+        K_block_ptr = K_block_ptr.advance( ( K_TILE_SIZE, 0) )
+        V_block_ptr = V_block_ptr.advance( ( K_TILE_SIZE, 0) )
 
     Li = mi + tl.log(li)  # (batch_size, bq, 1)
     Oi_final = Oi_new / li
+
+    # tl.device_print(li.type.element_ty)
+    # tl.device_print(mi.type.element_ty)
+    # tl.device_print(Oi_new.type.element_ty)
 
     tl.store(O_block_ptr, Oi_final)
     tl.store(L_block_ptr, tl.reshape(Li, (Q_TILE_SIZE,)))
