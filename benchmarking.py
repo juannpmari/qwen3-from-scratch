@@ -5,7 +5,8 @@ from src.qwen3.transformer import Transformer
 from src.train.loss import compute_cross_entropy_batch
 import matplotlib.pyplot as plt
 
-def benchmark_llm(args): #CHECK this function
+
+def benchmark_llm(args):  # CHECK this function
     print("Benchmarking...")
     model = Transformer(
         vocab_size=args.vocab_size,
@@ -19,10 +20,14 @@ def benchmark_llm(args): #CHECK this function
     model.to(args.device)
     model.eval()
 
-    input_ids = torch.randint(0, args.vocab_size, (args.batch_size, args.context_length), device=args.device)
-    target = torch.randint(0, args.vocab_size, (args.batch_size, args.context_length), device=args.device)
+    input_ids = torch.randint(
+        0, args.vocab_size, (args.batch_size, args.context_length), device=args.device
+    )
+    target = torch.randint(
+        0, args.vocab_size, (args.batch_size, args.context_length), device=args.device
+    )
 
-    for _ in range(args.warmup_steps): # Until reach a steady state
+    for _ in range(args.warmup_steps):  # Until reach a steady state
         model(input_ids)
 
     def sync_function():
@@ -47,23 +52,27 @@ def benchmark_llm(args): #CHECK this function
             loss.backward()
 
     sync_function()
-    time_taken = (timeit.default_timer() - timer)/args.num_steps
+    time_taken = (timeit.default_timer() - timer) / args.num_steps
     print(f"Mean step time taken for {args.num_steps} steps: {time_taken}")
     return time_taken
-        
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Qwen3 Benchmarking Script")
     parser.add_argument("--vocab-size", type=int, default=50257, help="Vocabulary size")
     parser.add_argument("--num-layers", type=int, default=12, help="Number of layers")
-    parser.add_argument("--context-length", type=int, default=256, help="Context length")
+    parser.add_argument(
+        "--context-length", type=int, default=256, help="Context length"
+    )
     parser.add_argument("--d-model", type=int, default=768, help="Model dimension")
     parser.add_argument("--dff", type=int, default=3072, help="Feed-forward dimension")
     parser.add_argument("--gka-ratio", type=int, default=1, help="GQA ratio")
     parser.add_argument("--num-heads", type=int, default=12, help="Number of heads")
     parser.add_argument("--device", type=str, default="mps", help="Device to run on")
     parser.add_argument("--batch-size", type=int, default=1, help="Batch size")
-    parser.add_argument("--warmup-steps", type=int, default=25, help="Number of warmup steps")
+    parser.add_argument(
+        "--warmup-steps", type=int, default=25, help="Number of warmup steps"
+    )
     parser.add_argument("--num-steps", type=int, default=10, help="Number of steps")
     parser.add_argument("--forward-only", type=bool, default=True, help="Forward only")
     args = parser.parse_args()

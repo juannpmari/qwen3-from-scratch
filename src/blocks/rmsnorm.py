@@ -11,8 +11,8 @@ class RMSNorm(nn.Module):
         self,
         head_dim: int,
         eps: float = 1e-5,
-        device: torch.device  = None,
-        dtype: torch.dtype  = None,
+        device: torch.device = None,
+        dtype: torch.dtype = None,
     ):
         """
         Args:

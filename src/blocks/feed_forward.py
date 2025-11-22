@@ -8,7 +8,7 @@ class SwigluFeedForward(nn.Module):
     SwiGLU feed forward layer
     """
 
-    def __init__(self, hidden_dim: int, dff: int, device: torch.device  = None):
+    def __init__(self, hidden_dim: int, dff: int, device: torch.device = None):
         """
         Args:
             hidden_dim (int): hidden dimension

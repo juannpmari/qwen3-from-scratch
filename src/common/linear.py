@@ -11,8 +11,8 @@ class Linear(nn.Module):
         self,
         in_features: int,
         out_features: int,
-        device: torch.device  = None,
-        dtype: torch.dtype  = None,
+        device: torch.device = None,
+        dtype: torch.dtype = None,
     ):
         """
         Args:

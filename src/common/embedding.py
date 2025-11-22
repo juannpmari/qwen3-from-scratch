@@ -7,9 +7,7 @@ class Embedding(nn.Module):
     Embedding layer (implements the functionality of nn.Embedding)
     """
 
-    def __init__(
-        self, vocab_size: int, d_model: int, device: torch.device  = None
-    ):
+    def __init__(self, vocab_size: int, d_model: int, device: torch.device = None):
         """
         Args:
             vocab_size (int): vocabulary size
