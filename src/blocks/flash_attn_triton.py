@@ -178,4 +178,29 @@ class FlashAttnTriton(torch.autograd.Function):
         )
 
         ctx.save_for_backward(Q, K, V, O, L.squeeze(-1))
+        ctx.is_causal = is_causal
         return O, L
+    
+    @staticmethod
+    def backward(ctx, dO, dL):
+        Q, K, V, O, L = ctx.saved_tensors
+        D = torch.sum(O * dO, dim=-1, keepdim=True)  # b x nq x 1
+        S = Q @ torch.transpose(K, -2, -1) / (Q.size(-1) ** 0.5)  # b x nq x nk
+
+        if ctx.is_causal:
+            n_queries = Q.shape[-2]
+            n_keys = K.shape[-2]
+            mask = torch.arange(n_queries, device=S.device)[None, :, None] < torch.arange(n_keys, device=S.device)[None, None, :]
+            S = torch.where(mask, -torch.inf, S)
+        
+        P = torch.exp(S - L.unsqueeze(-1))  # b x nq x nk
+        dV = torch.transpose(P, -2, -1) @ dO  # b x nk x d
+        dP = dO @ torch.transpose(V, -2, -1)  # b x nq x nk
+        dS = P * (dP - D)  # b x nq x nk
+
+        dQ = dS @ K / (Q.size(-1) ** 0.5)
+        dK = torch.transpose(dS, -2, -1) @ Q / (Q.size(-1) ** 0.5)
+
+        return dQ, dK, dV, None
+
+# uv run pytest -k test_flash_backward_triton
