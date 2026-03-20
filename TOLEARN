@@ -1,0 +1,3 @@
+- sparse vs dense gradients
+- torch.no_grad(), computation graph
+- how does loss.backward() work?

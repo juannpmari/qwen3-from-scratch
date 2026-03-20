@@ -1,0 +1,7 @@
+1. ROPE - done
+2. cross entropy - done
+3. adamw - done
+4. separate attention computation to a function
+    - probar los tests en mi gqa - funcionan los shape, no los valores (en GQA, TransformerBlock y Transformer)
+
+
