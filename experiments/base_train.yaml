@@ -23,6 +23,14 @@ training:
   checkpoint_dir: checkpoints
   checkpoint_interval: 10
   dtype: float32
+  loss: vectorized  # Options: vectorized/fused (F.cross_entropy, default) | naive/loop (original Python-loop impl)
 
 # Device Configuration
 device: mps
+
+# Tensor-parallel weight init strategy for replicated params:
+#   dual_rng  (default) — shared seed builds identical replicated params, sharded
+#                         params re-drawn per-rank. No wasted init, no broadcast.
+#   broadcast           — random init everywhere, then broadcast rank 0's copy.
+init_mode: dual_rng
+init_seed: 0

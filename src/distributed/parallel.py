@@ -68,6 +68,69 @@ def sync_replicated_params(model, src=0):
 
 
 # ---------------------------------------------------------------------------
+# Two ways to get replicated params consistent across ranks. Pick with `mode`:
+#
+#   "broadcast": every rank random-inits everything, then rank 0's replicated
+#                params are broadcast to all. Simple and explicit, but ranks
+#                1..N-1 waste their replicated-param init (it gets overwritten).
+#
+#   "dual_rng":  build the whole model under a SHARED seed so replicated params
+#                come out identical on every rank with no communication; then
+#                re-init only the SHARDED params with a per-rank seed so each
+#                rank gets a distinct shard. No wasted init, no broadcast.
+#
+# Usage (bracketing model construction):
+#     seed_model_init(mode, shared_seed)      # before building
+#     model = Transformer(...); model.to(...)
+#     finalize_model_init(model, mode, shared_seed)   # after building
+# ---------------------------------------------------------------------------
+
+
+def _reinit_sharded_params(model, seed):
+    """Re-draw ONLY the sharded weights using a per-rank seed → each rank gets a
+    distinct shard. Replicated params are left untouched. We temporarily hijack
+    the global RNG and restore it afterwards so nothing downstream is perturbed."""
+    cpu_state = torch.get_rng_state()
+    cuda_states = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+
+    torch.manual_seed(seed)  # this rank's private init stream (CPU + CUDA)
+    for module in model.modules():
+        if isinstance(module, (ColumnParallelLinear, RowParallelLinear)):
+            module.reset_parameters()
+
+    torch.set_rng_state(cpu_state)
+    if cuda_states is not None:
+        torch.cuda.set_rng_state_all(cuda_states)
+
+
+def seed_model_init(mode, shared_seed=0):
+    """Call BEFORE constructing the model.
+
+    dual_rng: seed the global RNG so every rank builds IDENTICAL params (the
+              sharded ones are fixed up later in finalize_model_init).
+    broadcast: no-op — each rank keeps its own entropy-based random init."""
+    if mode == "dual_rng":
+        torch.manual_seed(shared_seed)
+    elif mode == "broadcast":
+        pass
+    else:
+        raise ValueError(f"unknown TP init mode: {mode!r}")
+
+
+def finalize_model_init(model, mode, shared_seed=0):
+    """Call AFTER constructing the model and moving it to its device.
+
+    dual_rng: give each rank a distinct shard (replicated params already agree).
+    broadcast: broadcast rank 0's replicated params to everyone."""
+    if mode == "dual_rng":
+        _reinit_sharded_params(model, seed=shared_seed + 1 + tp_rank())
+    elif mode == "broadcast":
+        sync_replicated_params(model)
+    else:
+        raise ValueError(f"unknown TP init mode: {mode!r}")
+
+
+# ---------------------------------------------------------------------------
 # The f and g operators (Megatron's "conjugate" pair).
 #
 # These are the ONLY place communication happens. They are torch.autograd
@@ -151,10 +214,18 @@ class ColumnParallelLinear(nn.Module):
             torch.empty(self.out_features_per_rank, in_features, device=device, dtype=dtype)
         )
         self.weight.tp_sharded = True  # skip in sync_replicated_params
-        # init identical scheme to your Linear (uses the FULL out_features)
-        init_std = (2 / (in_features + out_features)) ** 0.5
+        # init variance uses the FULL out_features, matching the single-GPU Linear
+        self._init_std = (2 / (in_features + out_features)) ** 0.5
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        # factored out so dual-RNG init can re-draw this shard with a per-rank seed
         torch.nn.init.trunc_normal_(
-            self.weight, mean=0.0, std=init_std, a=-init_std * 3.0, b=init_std * 3.0
+            self.weight,
+            mean=0.0,
+            std=self._init_std,
+            a=-self._init_std * 3.0,
+            b=self._init_std * 3.0,
         )
 
     def forward(self, x):
@@ -184,9 +255,18 @@ class RowParallelLinear(nn.Module):
             torch.empty(out_features, self.in_features_per_rank, device=device, dtype=dtype)
         )
         self.weight.tp_sharded = True  # skip in sync_replicated_params
-        init_std = (2 / (in_features + out_features)) ** 0.5
+        # init variance uses the FULL in_features, matching the single-GPU Linear
+        self._init_std = (2 / (in_features + out_features)) ** 0.5
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        # factored out so dual-RNG init can re-draw this shard with a per-rank seed
         torch.nn.init.trunc_normal_(
-            self.weight, mean=0.0, std=init_std, a=-init_std * 3.0, b=init_std * 3.0
+            self.weight,
+            mean=0.0,
+            std=self._init_std,
+            a=-self._init_std * 3.0,
+            b=self._init_std * 3.0,
         )
 
     def forward(self, x):

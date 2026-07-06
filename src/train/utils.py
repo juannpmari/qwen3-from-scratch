@@ -30,18 +30,24 @@ def pretokenize(txt_file: List[str], token_path: str = "data/tokens") -> None:
 def load_data(
     args, mode="train"
 ) -> (torch.utils.data.DataLoader, torch.utils.data.DataLoader):
+    # Fixed seed shared by ALL tensor-parallel ranks → every rank samples the
+    # same windows and shuffles in the same order, so they see identical batches
+    # (required for TP). Same value on every rank is the whole point.
+    seed = getattr(args, "data_seed", 0)
     if mode == "train":
         train_dl = create_dataloader(
             args.train_path,
             batch_size=args.batch_size,
             context_length=args.context_length,
             sample_size=args.sample_size,
+            seed=seed,
         )
         val_dl = create_dataloader(
             args.val_path,
             batch_size=args.batch_size,
             context_length=args.context_length,
             sample_size=args.sample_size // 10,
+            seed=seed + 1,  # different data than train, still identical per-rank
         )
         return train_dl, val_dl
     elif mode == "test":
@@ -50,6 +56,7 @@ def load_data(
             batch_size=args.batch_size,
             context_length=args.context_length,
             sample_size=args.sample_size,
+            seed=seed,
         )
         return test_dl
 

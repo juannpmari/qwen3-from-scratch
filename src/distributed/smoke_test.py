@@ -15,13 +15,15 @@ What it PROVES:
 What it does NOT prove: exact numeric equivalence to a single-GPU baseline.
 That needs the weight-scatter helper and is the natural next step.
 """
+import os
 import torch
 import torch.distributed as dist
 
 from src.distributed.parallel import (
     setup_distributed,
     cleanup_distributed,
-    sync_replicated_params,
+    seed_model_init,
+    finalize_model_init,
     tp_device,
 )
 from src.qwen3.transformer import Transformer
@@ -36,13 +38,11 @@ def max_abs_diff_across_ranks(t):
 
 def main():
     rank, world = setup_distributed()
-    torch.manual_seed(1234 + rank)  # DIFFERENT seed per rank on purpose:
-    #   sharded params should differ per rank; sync_replicated_params() then
-    #   forces the replicated ones back into agreement. If the test still sees
-    #   identical logits, the sharding/comms are wired correctly.
+    mode = os.environ.get("TP_INIT_MODE", "dual_rng")  # dual_rng | broadcast
     device = tp_device()
 
     # tiny model; every sharded dim must divide the world size
+    seed_model_init(mode, shared_seed=0)  # dual_rng: seed the identical build
     model = Transformer(
         vocab_size=256,
         num_layers=2,
@@ -52,7 +52,8 @@ def main():
         gka_ratio=1,
         num_heads=8,
     ).to(device)
-    sync_replicated_params(model)  # replicated params now agree across ranks
+    # reconcile: replicated params identical across ranks, sharded ones distinct
+    finalize_model_init(model, mode, shared_seed=0)
 
     # identical input on every rank (broadcast rank 0's tokens)
     tokens = torch.randint(0, 256, (2, 16), device=device)
@@ -71,7 +72,7 @@ def main():
     wq_grad = model.transformer_blocks[0].gqa.W_Q.weight.grad  # sharded param
 
     if rank == 0:
-        print(f"world_size = {world}")
+        print(f"world_size = {world}  init_mode = {mode}")
         print(f"[fwd] max logit diff across ranks : {fwd_diff.item():.3e}  (expect ~0)")
         print(f"[bwd] embedding grad diff (replicated): {emb_diff.item():.3e}  (expect ~0)")
         print(f"[bwd] W_Q grad (sharded) shape: {tuple(wq_grad.shape)}  norm={wq_grad.norm().item():.3e}")

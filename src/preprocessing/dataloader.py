@@ -12,6 +12,7 @@ def sample_data(
     context_length: int,
     device: torch.device = None,
     dtype: torch.dtype = None,
+    generator: torch.Generator = None,
 ) -> (torch.Tensor, torch.Tensor):
     """
     Args:
@@ -25,7 +26,9 @@ def sample_data(
     x = torch.from_numpy(x)
     max_start_exclusive = len(x) - context_length
 
-    starts = torch.randint(0, max_start_exclusive, (sample_size,))
+    # generator lets callers make the sampled windows deterministic without
+    # touching global RNG (used for identical data across tensor-parallel ranks)
+    starts = torch.randint(0, max_start_exclusive, (sample_size,), generator=generator)
     offsets = torch.arange(context_length).unsqueeze(0)  # (1, context_length)
     idx = starts.unsqueeze(1) + offsets  # (sample_size, context_length)
 
@@ -45,16 +48,23 @@ class CustomDataset(
     """
 
     def __init__(
-        self, tokens_path: str, context_length: int = 256, sample_size: int = 10
+        self,
+        tokens_path: str,
+        context_length: int = 256,
+        sample_size: int = 10,
+        generator: torch.Generator = None,
     ):
         """
         Args:
             tokens_path (str): path to the file containing the tokenized data
             context_length (int, optional): context length. Defaults to 256.
             sample_size (int, optional): amount of samples to generate. Defaults to 10.
+            generator (torch.Generator, optional): RNG for deterministic sampling.
         """
         token_ids = np.load(tokens_path, mmap_mode="r")
-        self.inputs, self.targets = sample_data(token_ids, sample_size, context_length)
+        self.inputs, self.targets = sample_data(
+            token_ids, sample_size, context_length, generator=generator
+        )
 
     def __len__(self):
         """
@@ -80,6 +90,7 @@ def create_dataloader(
     batch_size: int = 4,
     sample_size: int = 10,
     drop_last: bool = True,
+    seed: int = None,
 ) -> DataLoader:
     """
     Creates a dataloader for the tokenized data.
@@ -90,14 +101,26 @@ def create_dataloader(
         batch_size (int, optional): batch size. Defaults to 4.
         sample_size (int, optional): amount of samples to generate. Defaults to 10.
         drop_last (bool, optional): whether to drop the last batch if it is not full. Defaults to True.
+        seed (int, optional): if set, makes both the sampled windows AND the
+            shuffle order deterministic. Passing the SAME seed on every
+            tensor-parallel rank guarantees every rank sees identical batches
+            (a hard requirement for TP) without any communication.
     Returns:
         DataLoader: dataloader for the tokenized data
     """
-    dataset = CustomDataset(tokens_path, context_length, sample_size)
+    # A LOCAL generator — NOT torch.manual_seed() — so we don't disturb the
+    # global RNG. That matters: global RNG must stay per-rank-distinct so the
+    # model's sharded params still init differently on each rank.
+    generator = None
+    if seed is not None:
+        generator = torch.Generator().manual_seed(seed)
+
+    dataset = CustomDataset(tokens_path, context_length, sample_size, generator=generator)
     return DataLoader(
         dataset,
         batch_size=batch_size,
         drop_last=drop_last,
         num_workers=2,
         shuffle=shuffle,
+        generator=generator,  # deterministic shuffle order when seed is set
     )

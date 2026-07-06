@@ -4,7 +4,8 @@ from argparse import Namespace
 from src.distributed.parallel import (
     setup_distributed,
     cleanup_distributed,
-    sync_replicated_params,
+    seed_model_init,
+    finalize_model_init,
     tp_rank,
     tp_device,
 )
@@ -37,6 +38,7 @@ def train_model(args):
     train_dl, val_dl = load_data(args, mode="train")
     # NOTE: the parallel layers read the world size at construction time, so the
     # process group must already be initialized (done in __main__) before this.
+    seed_model_init(args.init_mode, args.init_seed)  # dual_rng seeds the build
     model = Transformer(
         vocab_size=args.vocab_size,
         num_layers=args.num_layers,
@@ -49,10 +51,10 @@ def train_model(args):
     device = tp_device()  # this rank's GPU (cuda:0 for all ranks on a 1-GPU box)
     dtype = DTYPE_MAP.get(args.dtype, torch.float32)
     model.to(device=device, dtype=dtype)
-    # Replicated params (embeddings, norms, output layer) were randomly init'd
-    # independently on each rank — broadcast rank 0's copy so all ranks agree.
-    # Sharded params are left as-is (each rank keeps its own distinct shard).
-    sync_replicated_params(model)
+    # Reconcile params across ranks: replicated ones made identical, sharded
+    # ones made distinct. See finalize_model_init for the dual_rng vs broadcast
+    # strategies (mode chosen in config).
+    finalize_model_init(model, args.init_mode, args.init_seed)
     model.train()
     optimizer = AdamW(model.parameters(), lr=args.learning_rate)
 
@@ -99,12 +101,12 @@ def generate(args):
     )
     optimizer = AdamW(model.parameters(), lr=args.learning_rate)
     src = args.weights_dir
+    # NOTE: with TP each rank must load ITS OWN shard file (checkpoint_*_rank{N}.pt).
+    # The loaded weights are authoritative, so we do NOT reconcile/re-init after.
     iteration = load_checkpoint(src, model, optimizer)
     device = tp_device()  # this rank's GPU
     dtype = DTYPE_MAP.get(args.dtype, torch.float32)
     model.to(device=device, dtype=dtype)
-    # keep replicated params consistent across ranks after loading the checkpoint
-    sync_replicated_params(model)
     model.eval()
 
     prompt = """I HAD always thought Jack Gisburn rather a cheap genius--though a good fellow enough--so it was no great surprise to me to hear that, in the height of his glory, he had dropped his painting, married a rich widow, and established himself in a villa on the Riviera. (Though I rather thought it would have been Rome or Florence.)
@@ -156,6 +158,8 @@ if __name__ == "__main__":
             loss=config["training"].get("loss", "vectorized"),
             device=config["device"],
             dtype=config["training"]["dtype"],
+            init_mode=config.get("init_mode", "dual_rng"),
+            init_seed=config.get("init_seed", 0),
         )
     elif config["mode"] == "inference":
         args = Namespace(
