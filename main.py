@@ -1,6 +1,13 @@
 import yaml
 import argparse
 from argparse import Namespace
+from src.distributed.parallel import (
+    setup_distributed,
+    cleanup_distributed,
+    sync_replicated_params,
+    tp_rank,
+    tp_device,
+)
 from src.preprocessing.tokenizer import BPETokenizer
 from src.train.utils import load_data, plot_losses
 from src.train.train import train
@@ -25,8 +32,11 @@ DTYPE_MAP = {
 
 
 def train_model(args):
-    print("training model...")
+    if tp_rank() == 0:
+        print("training model...")
     train_dl, val_dl = load_data(args, mode="train")
+    # NOTE: the parallel layers read the world size at construction time, so the
+    # process group must already be initialized (done in __main__) before this.
     model = Transformer(
         vocab_size=args.vocab_size,
         num_layers=args.num_layers,
@@ -36,9 +46,13 @@ def train_model(args):
         gka_ratio=args.gka_ratio,
         num_heads=args.num_heads,
     )
-    device = args.device
+    device = tp_device()  # this rank's GPU (cuda:0 for all ranks on a 1-GPU box)
     dtype = DTYPE_MAP.get(args.dtype, torch.float32)
     model.to(device=device, dtype=dtype)
+    # Replicated params (embeddings, norms, output layer) were randomly init'd
+    # independently on each rank — broadcast rank 0's copy so all ranks agree.
+    # Sharded params are left as-is (each rank keeps its own distinct shard).
+    sync_replicated_params(model)
     model.train()
     optimizer = AdamW(model.parameters(), lr=args.learning_rate)
 
@@ -47,6 +61,11 @@ def train_model(args):
         model, optimizer, args, train_dl, val_dl, device
     )
     timer = time.time() - timer
+
+    # Only rank 0 writes summaries/plots — every rank runs identical replicated
+    # logic, so N processes would otherwise clobber the same files.
+    if tp_rank() != 0:
+        return
 
     with open(f"{checkpoint_dir}/config.yaml", "w") as f:
         yaml.dump(args, f)
@@ -81,9 +100,11 @@ def generate(args):
     optimizer = AdamW(model.parameters(), lr=args.learning_rate)
     src = args.weights_dir
     iteration = load_checkpoint(src, model, optimizer)
-    device = args.device
+    device = tp_device()  # this rank's GPU
     dtype = DTYPE_MAP.get(args.dtype, torch.float32)
     model.to(device=device, dtype=dtype)
+    # keep replicated params consistent across ranks after loading the checkpoint
+    sync_replicated_params(model)
     model.eval()
 
     prompt = """I HAD always thought Jack Gisburn rather a cheap genius--though a good fellow enough--so it was no great surprise to me to hear that, in the height of his glory, he had dropped his painting, married a rich widow, and established himself in a villa on the Riviera. (Though I rather thought it would have been Rome or Florence.)
@@ -102,6 +123,7 @@ def generate(args):
 
 
 if __name__ == "__main__":
+    rank, world_size = setup_distributed()
     # parser = argparse.ArgumentParser(description="Qwen3 Training Script")
     # parser.add_argument("--config", type=str, default="experiments/base_config.yaml", help="Path to the configuration file")
     # args = parser.parse_args()
@@ -131,6 +153,7 @@ if __name__ == "__main__":
             checkpoint_dir=config["training"]["checkpoint_dir"],
             checkpoint_interval=config["training"]["checkpoint_interval"],
             sample_size=config["training"]["sample_size"],
+            loss=config["training"].get("loss", "vectorized"),
             device=config["device"],
             dtype=config["training"]["dtype"],
         )
@@ -159,3 +182,5 @@ if __name__ == "__main__":
 
     elif args.mode == "inference":
         generate(args)
+
+    cleanup_distributed()

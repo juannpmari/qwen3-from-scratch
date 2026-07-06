@@ -2,7 +2,11 @@ import torch
 import torch.nn as nn
 from src.blocks.rope import RoPE
 from src.blocks.rmsnorm import RMSNorm
-from src.common.linear import Linear
+from src.distributed.parallel import (
+    ColumnParallelLinear,
+    RowParallelLinear,
+    tp_world,
+)
 
 
 class GQA(nn.Module):
@@ -25,17 +29,27 @@ class GQA(nn.Module):
             num_heads (int, optional): number of heads. Defaults to 16.
         """
         super().__init__()
-        self.W_Q = Linear(hidden_dim, hidden_dim)  # 1024x1024 #no QKV bias in qwen3
-        self.W_K = Linear(
+        # Q/K/V are split by their OUTPUT dimension → each rank gets a subset of
+        # the heads. No comm in the projection itself (f handles backward).
+        self.W_Q = ColumnParallelLinear(hidden_dim, hidden_dim)  # split query heads
+        self.W_K = ColumnParallelLinear(
             hidden_dim, int(hidden_dim // gka_ratio)
-        )  # 1024x512 #no QKV bias in qwen3
-        self.W_V = Linear(
+        )  # split KV heads
+        self.W_V = ColumnParallelLinear(
             hidden_dim, int(hidden_dim // gka_ratio)
-        )  # 1024x512 #no QKV bias in qwen3
+        )  # split KV heads
         self.num_heads = num_heads
         self.head_dim = hidden_dim // num_heads
         self.gka_ratio = gka_ratio
-        self.linear_output_layer = Linear(hidden_dim, hidden_dim)
+        # Output projection consumes the sharded heads → row-parallel; its g
+        # operator all-reduces the partial outputs back to full hidden_dim.
+        self.linear_output_layer = RowParallelLinear(hidden_dim, hidden_dim)
+
+        # Per-rank head counts. Every reshape in forward must use THESE, not the
+        # global counts, because each rank physically holds only its shard.
+        world = tp_world()
+        self.local_num_heads = num_heads // world
+        self.local_num_kv_heads = (num_heads // gka_ratio) // world
         self.rope = RoPE(self.head_dim, context_length)
         self.rmsnorm = RMSNorm(self.head_dim)
 
@@ -70,14 +84,14 @@ class GQA(nn.Module):
 
         # split into heads
         queries = queries.view(
-            batch_size, context_length, self.head_dim, self.num_heads
-        )  # batch_size x context_length x 64 x 16
+            batch_size, context_length, self.head_dim, self.local_num_heads
+        )  # local query heads only
         keys = keys.view(
-            batch_size, context_length, self.head_dim, self.num_heads // self.gka_ratio
-        )  # batch_size x context_length x 64 x 8
+            batch_size, context_length, self.head_dim, self.local_num_kv_heads
+        )  # local KV heads only
         values = values.view(
-            batch_size, context_length, self.head_dim, self.num_heads // self.gka_ratio
-        )  # batch_size x context_length x 64 x 8
+            batch_size, context_length, self.head_dim, self.local_num_kv_heads
+        )  # local KV heads only
 
         # normalize QK (CHECK THIS)
         queries = self.rmsnorm.forward(queries.permute(0, 3, 1, 2)).permute(
@@ -89,7 +103,9 @@ class GQA(nn.Module):
 
         # Compute RoPE embeddings
         token_positions = (
-            torch.arange(context_length) if token_positions is None else token_positions
+            torch.arange(context_length, device=x.device)
+            if token_positions is None
+            else token_positions
         )
         queries = self.rope.forward(
             queries, token_positions=token_positions
@@ -103,9 +119,9 @@ class GQA(nn.Module):
             batch_size,
             context_length,
             self.head_dim,
-            int(self.num_heads // self.gka_ratio),
+            self.local_num_kv_heads,
             self.gka_ratio,
-        )  # batch_size x context_length x 64 x 8 x 2
+        )  # split local query heads into (kv_groups, gka_ratio)
         keys = keys.unsqueeze(-1)  # batch_size x context_length x 64 x 8 x 1
         keys = keys.transpose(1, 2)  # batch_size x 64 x context_length x 8 x 1
         queries = queries.permute(
@@ -134,18 +150,20 @@ class GQA(nn.Module):
             attn_weights @ values
         )  # batch_size x 8 x 2 x context_length x 64
         context_vector = context_vector.view(
-            batch_size, self.num_heads, context_length, hidden_dim // self.num_heads
-        )  # batch_size x 16 x context_length x 64
+            batch_size, self.local_num_heads, context_length, self.head_dim
+        )  # batch_size x local_num_heads x context_length x 64
         context_vector = context_vector.permute(
             0, 2, 1, 3
         )  # batch_size x context_length x 16 x 64
 
-        # concatenate heads
+        # concatenate heads → this is the SHARDED hidden dim (local heads only),
+        # exactly what RowParallelLinear expects as its sharded input.
         context_vector = context_vector.reshape(
-            batch_size, context_length, hidden_dim
-        )  # batch_size x context_length x 1024
+            batch_size, context_length, self.local_num_heads * self.head_dim
+        )  # batch_size x context_length x (local_num_heads * 64)
 
-        # apply linear output layer
+        # row-parallel output projection: local matmul → partial, then g
+        # all-reduces across ranks back to the full hidden_dim.
         context_vector = self.linear_output_layer(
             context_vector
         )  # batch_size x context_length x 1024

@@ -1,7 +1,8 @@
 import argparse
-from src.train.loss import compute_cross_entropy_batch
+from src.train.loss import get_loss_fn
 from src.train.checkpointing import save_checkpoint
 from src.train.optimizer import clip_gradients
+from src.distributed.parallel import tp_rank
 import torch.nn as nn
 import torch.optim as optim
 import torch
@@ -38,6 +39,7 @@ def train(
     tokens_seen, global_steps = 0, 0
     track_train_loss = []
     track_val_loss = []
+    loss_fn = get_loss_fn(getattr(args, "loss", "vectorized"))
     checkpoint_dir = os.path.join(
         args.checkpoint_dir, f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     )
@@ -48,31 +50,46 @@ def train(
             target = target.to(device)
             optimizer.zero_grad()
             logits = model(input)
-            loss = compute_cross_entropy_batch(logits, target)
-            loss.backward()  # CHECK; here it gets stuck
+            loss = loss_fn(logits, target)
+            loss.backward()
             clip_gradients(model.parameters(), args.max_grad_norm)
             optimizer.step()
             tokens_seen += len(input)
             global_steps += 1
             track_train_loss.append(loss.item())
-            print(f"Global Steps: {global_steps}, Training loss: {loss.item()}")
+            if tp_rank() == 0:
+                print(f"Global Steps: {global_steps}, Training loss: {loss.item()}")
 
             if global_steps % args.checkpoint_interval == 0:
-                print(f"Epoch {epoch}, Global Steps: {global_steps}")
+                if tp_rank() == 0:
+                    print(f"Epoch {epoch}, Global Steps: {global_steps}")
+                # The validation forward runs on EVERY rank — it contains the
+                # same all-reduces as training, so skipping it on non-zero ranks
+                # would leave rank 0 waiting on collectives that never fire
+                # (deadlock). Only the printing and the checkpoint write below
+                # are rank-0-only.
                 val_loss = 0
                 for input_val, target_val in val_dl:
                     input_val = input_val.to(device)
                     target_val = target_val.to(device)
                     val_logits = model(input_val)
-                    val_loss += compute_cross_entropy_batch(val_logits, target_val)
+                    val_loss += loss_fn(val_logits, target_val)
                 val_loss /= len(val_dl)
-                print(f"Validation Loss: {val_loss.item()}")
+                track_val_loss.append(val_loss.item())
+                if tp_rank() == 0:
+                    print(f"Validation Loss: {val_loss.item()}")
+                # EVERY rank saves its OWN shard to a rank-specific file, so no
+                # shard is lost. Each file holds this rank's slices of the
+                # sharded weights plus a (redundant, identical) copy of the
+                # replicated weights. The rank in the filename prevents clobber.
+                # To resume, each rank loads checkpoint_{epoch}_rank{its rank}.pt.
                 os.makedirs(checkpoint_dir, exist_ok=True)
                 save_checkpoint(
                     model,
                     optimizer,
                     epoch,
-                    os.path.join(checkpoint_dir, f"checkpoint_{epoch}.pt"),
+                    os.path.join(
+                        checkpoint_dir, f"checkpoint_{epoch}_rank{tp_rank()}.pt"
+                    ),
                 )
-                track_val_loss.append(val_loss.item())
     return track_train_loss, track_val_loss, tokens_seen, global_steps, checkpoint_dir

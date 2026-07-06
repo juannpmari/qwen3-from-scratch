@@ -41,11 +41,14 @@ class TransformerBlock(nn.Module):
         residual = x
         x = self.rmsnorm_1(x)
         x = self.gqa(x)
-        x += residual
+        # NOTE: out-of-place (x = x + residual), NOT x += residual. gqa/ff end
+        # in the g custom autograd Function; modifying its output in place is
+        # forbidden and would corrupt our hand-written backward.
+        x = x + residual
         residual = x
         x = self.rmsnorm_2(x)
         x = self.ff(x)
-        x += residual
+        x = x + residual
         return x
 
 
