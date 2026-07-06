@@ -1,6 +1,6 @@
 import argparse
 from src.train.loss import get_loss_fn
-from src.train.checkpointing import save_checkpoint
+from src.train.checkpointing import save_consolidated_checkpoint
 from src.train.optimizer import clip_gradients
 from src.distributed.parallel import tp_rank
 import torch.nn as nn
@@ -78,18 +78,13 @@ def train(
                 track_val_loss.append(val_loss.item())
                 if tp_rank() == 0:
                     print(f"Validation Loss: {val_loss.item()}")
-                # EVERY rank saves its OWN shard to a rank-specific file, so no
-                # shard is lost. Each file holds this rank's slices of the
-                # sharded weights plus a (redundant, identical) copy of the
-                # replicated weights. The rank in the filename prevents clobber.
-                # To resume, each rank loads checkpoint_{epoch}_rank{its rank}.pt.
-                os.makedirs(checkpoint_dir, exist_ok=True)
-                save_checkpoint(
+                # Consolidated save: ALL ranks participate in the gather (it is a
+                # collective — do NOT guard it behind rank 0 or it deadlocks);
+                # only rank 0 writes the single, world-size-agnostic file. The
+                # result loads at any world size (see load_consolidated_checkpoint).
+                save_consolidated_checkpoint(
                     model,
-                    optimizer,
                     epoch,
-                    os.path.join(
-                        checkpoint_dir, f"checkpoint_{epoch}_rank{tp_rank()}.pt"
-                    ),
+                    os.path.join(checkpoint_dir, f"checkpoint_{epoch}.pt"),
                 )
     return track_train_loss, track_val_loss, tokens_seen, global_steps, checkpoint_dir

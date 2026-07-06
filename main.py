@@ -15,7 +15,7 @@ from src.train.train import train
 from src.inference.generate import generate_text
 from src.qwen3.transformer import Transformer
 from src.train.optimizer import AdamW
-from src.train.checkpointing import load_checkpoint
+from src.train.checkpointing import load_consolidated_checkpoint
 import tiktoken
 import time
 import torch
@@ -99,11 +99,12 @@ def generate(args):
         gka_ratio=args.gka_ratio,
         num_heads=args.num_heads,
     )
-    optimizer = AdamW(model.parameters(), lr=args.learning_rate)
     src = args.weights_dir
-    # NOTE: with TP each rank must load ITS OWN shard file (checkpoint_*_rank{N}.pt).
+    # Load the ONE consolidated (world-size-agnostic) checkpoint and reshard it
+    # into THIS run's TP model. Inference may use a different world size than
+    # training did — each rank slices out its own shard from the full weights.
     # The loaded weights are authoritative, so we do NOT reconcile/re-init after.
-    iteration = load_checkpoint(src, model, optimizer)
+    iteration = load_consolidated_checkpoint(src, model)
     device = tp_device()  # this rank's GPU
     dtype = DTYPE_MAP.get(args.dtype, torch.float32)
     model.to(device=device, dtype=dtype)

@@ -214,6 +214,9 @@ class ColumnParallelLinear(nn.Module):
             torch.empty(self.out_features_per_rank, in_features, device=device, dtype=dtype)
         )
         self.weight.tp_sharded = True  # skip in sync_replicated_params
+        # This weight is split along dim 0 (output rows). Consolidated checkpoint
+        # save/load uses shard_dim to know which axis to gather/slice on.
+        self.shard_dim = 0
         # init variance uses the FULL out_features, matching the single-GPU Linear
         self._init_std = (2 / (in_features + out_features)) ** 0.5
         self.reset_parameters()
@@ -255,6 +258,9 @@ class RowParallelLinear(nn.Module):
             torch.empty(out_features, self.in_features_per_rank, device=device, dtype=dtype)
         )
         self.weight.tp_sharded = True  # skip in sync_replicated_params
+        # This weight is split along dim 1 (input columns). Consolidated
+        # checkpoint save/load uses shard_dim to gather/slice on the right axis.
+        self.shard_dim = 1
         # init variance uses the FULL in_features, matching the single-GPU Linear
         self._init_std = (2 / (in_features + out_features)) ** 0.5
         self.reset_parameters()
@@ -273,3 +279,99 @@ class RowParallelLinear(nn.Module):
         # x is already sharded along in_features → local matmul is a partial sum
         partial = x.matmul(self.weight.t())
         return g(partial)  # all-reduce now; identity in backward
+
+
+# ---------------------------------------------------------------------------
+# Consolidated (world-size-agnostic) checkpointing.
+#
+# A running TP model is scattered: rank r holds only a SLICE of each sharded
+# weight. We want checkpoints that DON'T bake in the training world size, so
+# training and inference are fully decoupled — train on 8 GPUs, infer on 2 (or
+# 1). Two operations make that work:
+#
+#   gather_full_state_dict(model)  -> reconstruct the FULL matrices (all_gather
+#                                     + concat) so rank 0 can save ONE file that
+#                                     is byte-identical to a single-GPU model.
+#   load_full_state_dict(model, sd) -> each rank SLICES its own shard back out of
+#                                     the full tensors (reshard on load), at
+#                                     whatever the current world size is.
+#
+# Both rely on each parallel layer's `shard_dim` (0 for column, 1 for row) and
+# the per-param `tp_sharded` flag. Everything else (embeddings, norms, output
+# layer, buffers) is replicated and copied through unchanged.
+# ---------------------------------------------------------------------------
+
+
+def _sharded_weight_dims(model):
+    """Map state_dict key -> shard_dim for every sharded weight in the model.
+
+    A parallel layer named e.g. "transformer_blocks.0.gqa.W_Q" owns the
+    state_dict key "transformer_blocks.0.gqa.W_Q.weight"; we tag that key with
+    the layer's shard_dim so gather/slice know which axis to act on."""
+    dims = {}
+    for name, module in model.named_modules():
+        if isinstance(module, (ColumnParallelLinear, RowParallelLinear)):
+            dims[f"{name}.weight"] = module.shard_dim
+    return dims
+
+
+def _all_gather_cat(local, dim):
+    """all_gather a per-rank shard and concatenate along `dim` → full tensor.
+
+    Collective: EVERY rank must call this together. Each rank's shard has the
+    same shape (dims divide evenly), which is what all_gather requires."""
+    world = tp_world()
+    gathered = [torch.empty_like(local) for _ in range(world)]
+    dist.all_gather(gathered, local.contiguous())
+    return torch.cat(gathered, dim=dim)
+
+
+def gather_full_state_dict(model):
+    """Reconstruct the full (unsharded) model state_dict.
+
+    Returns the assembled dict ON RANK 0, and None on other ranks. Note every
+    rank still PARTICIPATES in the all_gathers (they are collectives) — do not
+    guard the body behind `if rank == 0` or it will deadlock. Tensors are moved
+    to CPU so the saved file is portable across devices."""
+    shard_dims = _sharded_weight_dims(model)
+    local_sd = model.state_dict()
+    is_rank0 = tp_rank() == 0
+    full = {} if is_rank0 else None
+
+    for key, tensor in local_sd.items():
+        if key in shard_dims:
+            # sharded weight → gather the slices from all ranks into the full matrix
+            full_tensor = _all_gather_cat(tensor, shard_dims[key])
+            if is_rank0:
+                full[key] = full_tensor.detach().cpu()
+        else:
+            # replicated param/buffer → identical on every rank; rank 0 keeps its copy
+            if is_rank0:
+                full[key] = tensor.detach().cpu()
+    return full
+
+
+def load_full_state_dict(model, full_state_dict):
+    """Load a full (unsharded) state_dict into this rank's TP model by SLICING
+    each sharded weight down to this rank's shard. Replicated params/buffers are
+    copied as-is. Works at ANY world size (including 1), regardless of the world
+    size used when the file was saved — the file carries no sharding info."""
+    shard_dims = _sharded_weight_dims(model)
+    world = tp_world()
+    rank = tp_rank()
+
+    resharded = {}
+    for key, tensor in full_state_dict.items():
+        if key in shard_dims:
+            dim = shard_dims[key]
+            assert tensor.size(dim) % world == 0, (
+                f"{key}: full size {tensor.size(dim)} on dim {dim} does not "
+                f"divide world size {world}"
+            )
+            chunk = tensor.size(dim) // world
+            # this rank's contiguous slice along the shard axis
+            resharded[key] = tensor.narrow(dim, rank * chunk, chunk).clone()
+        else:
+            resharded[key] = tensor
+    # shapes now match this rank's (sharded) parameters exactly
+    model.load_state_dict(resharded)
