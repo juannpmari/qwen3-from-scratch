@@ -371,10 +371,13 @@ to be added here.)
 - Deterministic, communication-free data loading (shared-seed local generator
   covering both the window sampling and the shuffle).
 - Rank-0-only logging/writes; all-rank validation forward (deadlock-safe).
-- Checkpointing: per-rank shard files (interim) and consolidated world-size-
-  agnostic save + reshard-on-load (in progress).
-- **Verified on CPU / `gloo` with 2 processes** via the smoke test, in both init
-  modes.
+- Checkpointing: consolidated, world-size-agnostic save (gather all shards →
+  one file identical to a single-GPU state dict) + reshard-on-load. Loading uses
+  `torch.load(mmap=True)` so each rank pages in only its own shard of the sharded
+  weights instead of materializing the full model.
+- **Verified on CPU / `gloo` with 2 processes**: the smoke test (both init
+  modes), a checkpoint save→reshard→load roundtrip (bit-identical), and a
+  cross-world-size reload (train `world=2` → infer `world=1`).
 
 ### Known limitations / not done
 
@@ -390,12 +393,27 @@ to be added here.)
   *intra-node* anyway, because it does an all-reduce at every layer and wants the
   fast NVLink interconnect; scaling wider is normally done with data/pipeline
   parallelism across nodes, not more TP ranks.
-- **Checkpoint streaming for very large models.** The consolidated save gathers
-  full matrices onto rank 0, which must briefly hold them in memory. Truly large
-  models would need a streaming/sharded-write scheme.
-- **Optimizer-state handling in consolidated checkpoints.** Gathering/resharding
-  the optimizer moments (not just the weights) is not yet addressed.
-- **`generate` checkpoint loading.** The per-rank vs. consolidated loading path in
-  inference still needs to be finalized to match the checkpoint format.
+- **Checkpoint streaming — partial.** *Save* still gathers full matrices onto
+  rank 0, which must briefly hold them in memory (truly large models would need a
+  streaming/sharded-write scheme). *Load* now mmaps, so each rank pages in only
+  its shard of the **sharded** weights — but **replicated** params (the embedding
+  and LM head, the biggest matrices) are still read in full on every rank. Truly
+  memory-optimal loading needs two things together: (1) vocab-sharding those
+  layers so they become sharded too, and (2) a sliceable on-disk format
+  (e.g. safetensors `get_slice`) that reads only a shard's bytes rather than
+  mmapping the full tensor. See `load_consolidated_checkpoint`.
+- **Optimizer-state handling in consolidated checkpoints.** The consolidated file
+  is weights-only. AdamW moments shard like their params, so gathering/resharding
+  them is possible but not done — consequence: inference/reload works at any world
+  size, but **mid-training resume across a changed world size is unsupported**.
+- **Multi-rank inference (`generate`) is not correctness-ready.** `generate_text`
+  samples with each rank's own RNG (`torch.multinomial`), so ranks pick different
+  next tokens; the per-layer all-reduces then combine shards computed on
+  *different* sequences → corrupted output past the first divergent token. It does
+  not deadlock (fixed `max_tokens`, no early stop), so *timing* benchmarks are
+  valid, but real generation needs **rank-consistent sampling** (sample on rank 0
+  then `broadcast` the token, or a shared sampling seed). Also: `main.py` hardcodes
+  the train config, and `base_inf.yaml` is missing the `sample_size`/`dtype` keys
+  the inference path reads — both must be fixed before inference runs at all.
 - **Not yet run on real multi-GPU / NCCL.** The GPU path is the same code with an
   auto-selected backend and device, but it has only been exercised on CPU/`gloo`.

@@ -35,8 +35,22 @@ def load_consolidated_checkpoint(src, model):
     """Load a consolidated (full) checkpoint and reshard it into this rank's TP
     model. Each rank reads the same file and slices out its own shard, so this
     works even if the current world size differs from the one used to train.
-    Returns the saved iteration number."""
-    data = torch.load(src, map_location="cpu")
+    Returns the saved iteration number.
+
+    mmap=True memory-maps the tensor storages instead of eagerly reading them,
+    so when load_full_state_dict does `tensor.narrow(...).clone()` on a SHARDED
+    weight, only that rank's shard is paged in from disk. Peak resident memory
+    per rank drops from "the full model" to roughly "replicated params + this
+    rank's shards" — avoiding every rank materializing the whole model.
+
+    LIMITATION / FUTURE WORK: this only streams the SHARDED weights. Replicated
+    params — which in this model include the embedding and LM head, the two
+    biggest matrices — are read in full on every rank (they are needed in full).
+    Truly memory-optimal loading requires (1) vocab-sharding those layers so they
+    become sharded too, and (2) a sliceable on-disk format (e.g. safetensors
+    get_slice) that reads only a shard's bytes rather than mmapping the full
+    tensor. See docs/distributed.md Roadmap."""
+    data = torch.load(src, map_location="cpu", mmap=True)
     load_full_state_dict(model, data["model_state_dict"])
     return data["iteration"]
 
